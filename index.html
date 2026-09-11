@@ -260,8 +260,8 @@ button,input,select,textarea{font-family:inherit}
   repeating-linear-gradient(180deg,rgba(0,0,0,.4) 0 1px,transparent 1px 30px),
   repeating-linear-gradient(90deg,rgba(0,0,0,.4) 0 1px,transparent 1px 44px);
   -webkit-mask-image:linear-gradient(-45deg,#000,transparent 70%);mask-image:linear-gradient(-45deg,#000,transparent 70%)}
-#story{flex:1;overflow-y:auto;padding:26px 30px 8px;position:relative;z-index:1;display:flex;flex-direction:column;justify-content:flex-end}
-#storyInner{max-width:860px;margin:0 auto;width:100%;flex:none}
+#story{flex:1 1 auto;min-height:34vh;overflow-y:auto;padding:26px 30px 8px;position:relative;z-index:1;display:flex;flex-direction:column}
+#storyInner{max-width:860px;margin:auto auto 0;width:100%;flex:none}
 
 .chapter{
   position:relative;margin-bottom:20px;
@@ -311,7 +311,7 @@ button,input,select,textarea{font-family:inherit}
 .inkball:nth-child(2){animation-delay:.15s} .inkball:nth-child(3){animation-delay:.3s}
 @keyframes ib{0%,80%,100%{transform:scale(.4);opacity:.3}40%{transform:scale(1);opacity:1}}
 
-#choices{padding:0 30px;position:relative;z-index:1}
+#choices{padding:0 30px;position:relative;z-index:1;flex:0 0 auto;min-height:0;max-height:48vh;overflow-y:auto;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent)}
 #choicesInner{max-width:860px;margin:0 auto;padding-bottom:8px}
 .optgroup{display:flex;align-items:center;gap:10px;margin:13px 0 8px;font-size:11px;letter-spacing:4px;color:var(--gold2)}
 .optgroup:before{content:"❧";font-size:12px;letter-spacing:0;color:var(--gold);flex:none;transform:translateY(-1px)}
@@ -343,6 +343,20 @@ button,input,select,textarea{font-family:inherit}
 .opt.big:hover{background:linear-gradient(180deg,#f8f3e2,#e7e0cc)}
 .opt:disabled{opacity:.42;cursor:not-allowed;transform:none}
 @media(max-width:1100px){ .optgrid{grid-template-columns:1fr} }
+@media(max-width:560px){
+  #story{padding:14px 14px 4px;min-height:30vh}
+  #choices{padding:0 14px;max-height:43vh}
+  #inputbar{padding:8px 14px 12px}
+  .opt{padding:7px 10px 7px 9px;font-size:13.5px}
+  .opt .og{width:20px;height:20px;font-size:11px}
+  .opt .ot i{font-size:11px}
+  .optgrid{gap:5px}
+  .optgroup{margin:10px 0 6px}
+  .chapter{margin-bottom:12px}
+  .ctext{font-size:14.5px;line-height:1.95;padding:14px 15px 12px}
+  .chead{padding:8px 14px 7px;font-size:10.5px;letter-spacing:1.5px}
+  .clines{padding:8px 15px 10px}
+}
 
 #inputbar{display:flex;gap:8px;padding:11px 30px 16px;position:relative;z-index:1}
 #inputbarInner{max-width:860px;margin:0 auto;display:flex;gap:8px;width:100%}
@@ -2733,7 +2747,12 @@ function narrHtml(t){
   return `<span class="fleuron">❧</span>`+esc(t);
 }
 function renderStory(scrollEnd){
-  const box=$('storyInner');
+  const box=$('storyInner'), sc=$('story');
+  // 重画会把 innerHTML 整个换掉，滚动位置跟着归零——于是每走一个月，
+  // 正文就跳回第一章，人看见的永远是几个月前的事。重画前先记住是不是贴着底，
+  // 是就还贴着底；玩家自己往上翻看旧章的时候，别把他拽回来。
+  const wasBottom = !sc || (sc.scrollHeight - sc.scrollTop - sc.clientHeight) < 80;
+  const keep = sc ? sc.scrollTop : 0;
   const list=S.chapters.slice(-16);
   const base=S.chapters.length-list.length;
   box.innerHTML=list.map((c,i)=>`
@@ -2744,7 +2763,10 @@ function renderStory(scrollEnd){
       <div class="ctext">${narrHtml(c.text)}</div>
       ${c.lines&&c.lines.length?`<div class="clines">${c.lines.map(l=>`<div class="l">${l}</div>`).join('')}</div>`:''}
     </div>`).join('');
-  if(scrollEnd) setTimeout(()=>{ const s=$('story'); s.scrollTop=s.scrollHeight; },30);
+  const toEnd = scrollEnd || wasBottom;
+  const put=()=>{ if(!sc) return; sc.scrollTop = toEnd ? sc.scrollHeight : keep; };
+  put();                       // 先摆一次，免得闪一下
+  setTimeout(put,30);          // 图片和换行排完再摆一次
 }
 function lineHtml(j,ev){
   const out=[];
@@ -3273,8 +3295,15 @@ function showNpc(id){
 function renderOptions(){
   const box=$('choicesInner'); box.innerHTML='';
   if(S.over){ box.innerHTML='<div style="text-align:center;color:#c3ad84;padding:8px">这一世已经过完了。</div>'; return; }
-  const opts=buildOptions().concat((S.llmOptions||[]).map(o=>({t:o.t,kind:o.kind})));
-  const plain=opts.filter(o=>!o.big), bigs=opts.filter(o=>o.big);
+  const base=buildOptions();
+  const llm=(S.llmOptions||[]).map(o=>({t:o.t,kind:o.kind,llm:true}));
+  const bigs=base.filter(o=>o.big);
+  // 模型给的是贴着眼下处境写的，排在前面；常规那几条垫后。一共不超过 6 条——
+  // 手机上再多就把正文挤没了。
+  const seen={};
+  const plain=llm.concat(base.filter(o=>!o.big))
+    .filter(o=>{ const k=String(o.t).replace(/\s/g,''); if(seen[k]) return false; seen[k]=1; return true; })
+    .slice(0,6);
   const mk=(o)=>{
     const b=document.createElement('button');
     b.className='opt'+(o.big?' big':'');
