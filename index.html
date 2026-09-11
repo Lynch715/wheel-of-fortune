@@ -391,6 +391,8 @@ button,input,select,textarea{font-family:inherit}
   padding:8px 10px;font-size:14px;color:var(--ink);outline:none}
 .field input:focus{border-color:var(--gold)}
 .field .hint{font-size:11.5px;color:var(--ink3);margin-top:4px;line-height:1.6}
+.field .hint code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:rgba(120,112,96,.16);border:1px solid rgba(140,138,147,.3);border-radius:2px;padding:0 4px}
+.field .hint b{color:var(--ink2);font-weight:700}
 .segs{display:flex;gap:5px;flex-wrap:wrap}
 .segs button{flex:1;min-width:82px;background:linear-gradient(180deg,#e2ded4,#d3cfc4);border:1px solid #b0aa9d;
   padding:7px 6px;font-size:12.5px;color:var(--ink2);cursor:pointer;letter-spacing:1px}
@@ -639,7 +641,8 @@ button,input,select,textarea{font-family:inherit}
     <div class="field"><label>接口地址</label><input id="cfgBase" placeholder="https://api.deepseek.com">
       <div class="hint">任何 OpenAI 兼容接口都行。DeepSeek：https://api.deepseek.com；智谱：https://open.bigmodel.cn/api/paas/v4</div></div>
     <div class="field"><label>API Key</label><input id="cfgKey" type="password" placeholder="sk-..."><div class="hint">只存在你自己浏览器里，不会发去别处。</div></div>
-    <div class="field"><label>模型</label><input id="cfgModel" placeholder="deepseek-chat"></div>
+    <div class="field"><label>模型</label><input id="cfgModel" placeholder="deepseek-flash">
+      <div class="hint">DeepSeek 现在用 <b>deepseek-flash</b>；<code>deepseek-chat</code> 和 <code>deepseek-reasoner</code> 已经停了。智谱：glm-4-plus。留空按 deepseek-flash 走。</div></div>
     <div class="field"><label>难度</label>
       <div class="segs" id="cfgFreedom"><button data-v="free">随心所欲</button><button data-v="mid">传奇</button><button data-v="strict">写实</button></div>
       <div class="hint" id="cfgFreeNote"></div>
@@ -722,7 +725,15 @@ button,input,select,textarea{font-family:inherit}
    ========================================================================== */
 
 const LS_CFG='mlife_cfg', LS_SAVE='mlife_save_v1', LS_HALL='mlife_hall';
-let cfg = JSON.parse(localStorage.getItem(LS_CFG)||'null') || {base:'https://api.deepseek.com', key:'', model:'deepseek-chat'};
+const DEFAULT_MODEL='deepseek-flash';
+// DeepSeek 在 2026 年 7 月停掉了 deepseek-chat / deepseek-reasoner，
+// 9 月又把 v4 那一批并进了 deepseek-flash。老存档里存着死掉的名字，
+// 不换的话玩家一填 key 就报 400，还以为是 key 的问题。
+const DEAD_MODELS=/^deepseek-(chat|reasoner|v4-pro|v4-flash(-vision-exp)?)$/i;
+let cfg = JSON.parse(localStorage.getItem(LS_CFG)||'null') || {base:'https://api.deepseek.com', key:'', model:DEFAULT_MODEL};
+if(/(^|\.)deepseek\.com/i.test(cfg.base||'') && DEAD_MODELS.test(cfg.model||'')) cfg.model=DEFAULT_MODEL;
+if(!cfg.model) cfg.model=DEFAULT_MODEL;
+try{ localStorage.setItem(LS_CFG,JSON.stringify(cfg)); }catch(_){}
 
 let S=null;
 const $=id=>document.getElementById(id);
@@ -2010,7 +2021,7 @@ function buildOptions(){
 
 /* ================= 引擎结算一个月 ================= */
 function resolveAction(action, kind, big){
-  const p=S.player, j={lines:[], rolls:[], deltas:{}};
+  const p=S.player, j={lines:[], rolls:[], deltas:{}, kind:kind};
   const D=(k,v)=>{ j.deltas[k]=(j.deltas[k]||0)+v; };
   const mul=big?1.9:1;
   const pm=priceMul(S.year);
@@ -2307,7 +2318,10 @@ function worldRules(){
 4. 婚育、私情、初夜权一类只作为事实与后果记述，用编年史与家族账本的口吻，不写床笫过程，不写露骨情节。
 5. 不写血腥细节，不写酷刑过程。暴力可以有后果，不必有特写。
 6. ${f.tone}
-【文风】中文。像人说话，句子有长短。不要排比，不要"首先其次"，不要在结尾升华总结，不要形容词堆砌。多写具体的东西：价钱、气味、天气、谁说了什么。人物讲话要符合身份，农夫不会引用亚里士多德。`;
+【文风】用大白话写，像一个人坐在对面跟你讲这个月发生了什么。句子有长短，别端着。
+不要排比，不要"首先其次"，不要在结尾升华总结，不要形容词堆砌，不要文绉绉的书面腔和半文半白。
+多写具体的东西：价钱、气味、天气、谁说了什么、手上在干什么活。
+人物讲话要符合身份，农夫不会引用亚里士多德，也不会说"倒也无妨"这种腔调。`;
 }
 function rosterBlock(){
   const r=rosterText();
@@ -2385,7 +2399,7 @@ ${recentBlock()}
 ${judgeBlock(j,ev)}
 
 写本月的记事。要求：
-- 正文 260—460 字，紧接上月结尾：地点、在场的人、悬着的事都要接上，除非行动本身就是离开。
+- 正文 300—500 字，紧接上月结尾：地点、在场的人、悬着的事都要接上，除非行动本身就是离开。
 - 判定成败要落到具体的事上，不要只说"顺利"。钱要写清是几个先令几个便士。
 - 若名录里的历史事件正在发生，让它以普通人能感知的方式渗进来（谷价、征兵、路上的难民、教堂的钟、税吏），不要写成史书旁白。
 - 身边人要有自己的心思和动作，不能只当布景。
@@ -2428,14 +2442,19 @@ function apiURL(){
   const b=(cfg.base||'').replace(/\/+$/,'');
   return /\/v\d+$/.test(b) ? b+'/chat/completions' : b+'/v1/chat/completions';
 }
+function isDeepSeek(){ return /(^|\.)deepseek\.com/i.test((cfg.base||'')); }
 async function callLLM(prompt,maxTokens){
   if(!cfg.key) throw new Error('NOKEY');
+  const body={model:cfg.model||DEFAULT_MODEL,
+      messages:[{role:'user',content:prompt}],
+      temperature:0.85, max_tokens:maxTokens||2200};
+  // deepseek-flash 不指定就是开着思考模式的。这里只要它写故事，不要它先想半天，
+  // 既慢又多花钱。别的厂家的接口不认这个字段，所以只对 DeepSeek 发。
+  if(isDeepSeek()) body.thinking={type:'disabled'};
   const res=await fetch(apiURL(),{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
-    body:JSON.stringify({model:cfg.model||'deepseek-chat',
-      messages:[{role:'user',content:prompt}],
-      temperature:0.85, max_tokens:maxTokens||2200})
+    body:JSON.stringify(body)
   });
   if(!res.ok){ const t=await res.text(); throw new Error('接口返回 '+res.status+'：'+t.slice(0,180)); }
   const d=await res.json();
@@ -2477,22 +2496,189 @@ async function llmTurn(prompt){
   return d;
 }
 
-/* ================= 没有 key 时的朴素叙事 ================= */
-function plainNarrative(action,j,ev){
-  const p=S.player, R=REGIONS[S.region];
-  const L=[];
-  L.push(`${feastOf(S.month)}。${S.year}年的${MONTHS[S.month]}，${seasonName(S.month)}。`);
-  L.push(pick([`${p.name}${p.age}岁。`,`这一月，${p.name}在${(S.scene&&S.scene.location)||(classRank(p.klass)>=4?'自家厅堂':'村里')}。`,''])); 
-  L.push(action+'。');
-  for(const l of (j.lines||[])) L.push(l+'。');
-  for(const b of (ev.birth||[])){
-    if(b.type==='知孕') L.push(`${b.who}有了身孕。`);
-    if(b.type==='临盆') L.push(`${b.mother}临盆，${b.babies.length?'产下'+b.babies.map(x=>x.name).join('、'):'孩子没能活下来'}${b.motherDead?'，产妇未能挺过来':''}。`);
+/* ================= 自由输入的闸门 =================
+   自由输入原样进叙事，也原样喂给模型。有两类东西不能就这么放过去：
+   一是性暴力与对孩子的侵害，写出来没有任何意义；二是现代事物，
+   写进十四世纪就穿帮。前者直接不受理，也不消耗这个月；后者只是拦一下。 */
+const INPUT_BLOCK=[
+  /强奸|强暴|奸污|迷奸|轮奸|性侵|猥亵|侵犯.{0,4}(妇|女|童|孩)/,
+  /(强迫|逼).{0,6}(行房|同房|上床|脱)/,
+  /(幼女|幼童|童女|小孩|孩子|儿童|女童|男童).{0,6}(上床|行房|同房|亲热|裸)/,
+  /(裸|脱光|下体|阴部|生殖器).{0,6}(描写|细写|详细)/
+];
+const INPUT_ANACHRONISM=/枪|手机|电话|汽车|火车|飞机|电脑|网络|手表|眼镜|香烟|土豆|玉米|咖啡|电灯|报纸|警察|银行卡|疫苗|抗生素/;
+function inputVerdict(t){
+  const s=String(t||'');
+  for(const re of INPUT_BLOCK) if(re.test(s)) return {ok:false, why:'block'};
+  if(INPUT_ANACHRONISM.test(s)) return {ok:false, why:'anachronism'};
+  return {ok:true};
+}
+
+/* ================= 没有 key 时的朴素叙事 =================
+   原先这段把引擎算出的每条结果各加一个句号排成一列，读起来像张收据：
+   「诸圣节与万灵节。1318年的十一月，秋。亚瑟19岁。去做工。事情没办成。」
+   现在改成人话——先起个景，再说这个月你干了什么、成没成，
+   最后才轮到家里和村里的事。句式轮着来，不让两章开头长一个样。 */
+
+// 每个月的景。三档写法：地里的人、城里的人、有地的人，看的是同一个月，
+// 看见的东西不一样。
+const MONTH_VIEW=[
+ {lo:['地冻得像铁，什么也干不了，人就守着火塘熬日子','日头短，天没亮就黑，柴烧得比想的快'],
+  mid:['铺子里冷清，来的都是赊账的老主顾','运河与道路都封着，货压在仓里出不去'],
+  hi:['厅里烧着整根的木头，外头的世界暂时与你无关','冬里没有战事，只有没完没了的账目与讼案']},
+ {lo:['雪化了一半，路烂成泥浆，鞋没有一天是干的','窖里的粮见了底，还得撑两个月'],
+  mid:['学徒的手冻裂了口子，活还是得做','春天的货要早订，这时候订最便宜'],
+  hi:['猎犬关得太久，一放出去就撒欢','该盘算今年往哪块地里下本钱了']},
+ {lo:['冻土松了，犁能下地，一年最累的一段开了头','麦种撒下去，接下来就看老天'],
+  mid:['集市重新热闹起来，外乡人带着一冬的消息','行会开春第一次议事，人人都想抢个好位置'],
+  hi:['佃户来交春税，庄头的账本摊在桌上','路通了，信也来了，有好有坏']},
+ {lo:['雨水多，草长得比麦快，得成天弯着腰','羊要剪毛了，剪下的羊毛换得来盐'],
+  mid:['港里的船开了，第一批货进城，价钱最好','手上的活排到了下个月'],
+  hi:['该去邻邑走动走动，一年的交情靠这几趟','马厩里添了两匹新马']},
+ {lo:['白昼长了，天没黑就还得下地','村口立了五月柱，年轻人到半夜才散'],
+  mid:['行会的旗挂出来，游行队伍绕城一圈','铺面的生意到了一年最旺的时候'],
+  hi:['该点齐人马了，出兵的季节到了','宴席一场接一场，酒钱花得比往年多']},
+ {lo:['草长得齐腰深，割下来晒成干草，冬天全指望它','蚊虫多，夜里睡不安稳'],
+  mid:['仲夏的篝火整夜不灭，第二天没人早起','外乡的商队进了城，带来南边的消息'],
+  hi:['召集令下到各处，扈从们在院子里试甲','夏猎的日子定下了']},
+ {lo:['麦子黄了，全村下地，连领主的仆役也得来搭手','太阳把后脖颈晒脱了皮，镰刀不敢停'],
+  mid:['粮价一天一个样，眼睛得盯紧','伙计都被借去收麦了，铺子里只剩你一个'],
+  hi:['收成关系到今年的账，你亲自去地头看了两回','有人来借粮，答不答应是门学问']},
+ {lo:['新麦进了仓，头一炉面包的味道整条巷子都闻得见','打谷场上的尘土一直不落'],
+  mid:['新粮上市，价钱跌到年内最低，该囤了','账房里算盘响到深夜'],
+  hi:['新麦烤的头一炉献到祭坛上，全村都来了','该定今年的租子怎么收']},
+ {lo:['米迦勒节结租，一年里最难熬的一天','交完租，剩下的够不够过冬心里就有数了'],
+  mid:['一年的账在这个月结清，该收的收，该赖的也躲不掉','行会的份子钱也在这个月交'],
+  hi:['庄头带着账本和一串钥匙来交差','该处置那些交不上租的人了']},
+ {lo:['把过不了冬的牲口宰了，腌进窖里','拾柴，糊墙，把漏风的地方堵上'],
+  mid:['冬货得赶在路封之前进城','天冷了，欠账的开始躲人'],
+  hi:['腌肉挂满了库房的梁','冬狩是一年里最后的热闹']},
+ {lo:['为死者点灯，去年这时候还在的人，今年有几个不在了','马丁节宰牲，肉香里掺着柴烟'],
+  mid:['诸圣节这天铺子关门，街上全是提灯的人','冬储备齐了，剩下的就是熬'],
+  hi:['为家族历代点了灯，念了名字','厅里开始生整日不灭的火']},
+ {lo:['领主开厅设宴，一年到头唯一一次全村吃肉','雪下了，什么都干不成，反倒踏实'],
+  mid:['十二夜里城里不宵禁，酒馆通宵开着','年底盘点，看这一年到底攒下什么'],
+  hi:['厅堂里摆了十二天的席，该来的都来了','年关的赏赐与人情，一样也不能漏']}
+];
+
+// 把选项文字变成一句有主语有动作的话
+const ACT_VERB={
+  work:['去做了一个月的活','把该干的活干完了'],
+  study:['坐下来读书','找人教你认字','闷头学了一个月'],
+  church:['去了教堂','跪在圣坛前','把这个月交给了教堂'],
+  social:['出去走动','跟人喝了几回酒','在席面上露了脸'],
+  court:['去主君跟前当差','走了一趟门路','递话、送礼，谋一个位置'],
+  trade:['拿钱出去做了一笔买卖','押了一笔货'],
+  fight:['跟着队伍走了','上了阵'],
+  rest:['闭门歇了一个月','躺着养了一个月'],
+  market:['去赶了集'],
+  estate:['骑马去了庄上'],
+  free:['']
+};
+// 这几类动作引擎自己会写一句「你骑马去了庄上」，不用再套一层
+const ACT_SELF=['fight','estate','market','buyland','will','pilgrim','promote','guild','laicize'];
+function actSentence(action,kind,p){
+  if(ACT_SELF.indexOf(kind)>=0) return '';
+  const v=ACT_VERB[kind];
+  if(v&&v.length&&v[0]) return pick(v)+'。';
+  // 自由输入，或者没归类的动作：把玩家写的那句话当成这个月做的事，
+  // 但要包一层，不能光秃秃甩在那儿。
+  const a=String(action||'').replace(/^【大事】/,'').replace(/[。！？]+$/,'');
+  if(!a) return '这个月没做成什么事。';
+  return pick([`这个月，你${a}。`,`你${a}。`,`你把心思花在一件事上：${a}。`]);
+}
+
+// 判定结果：把「成/不成」写成一句人话，而不是甩一个骰子
+function rollSentence(j){
+  const r=(j.rolls||[])[0];
+  if(!r) return '';
+  const c=r[2];
+  if(c.crit) return pick(['出乎意料地顺。','比预想的还要顺当。']);
+  if(c.success) return pick(['事情办成了。','算是办成了。','总算成了。']);
+  return pick(['事情没办成。','到底没成。','白忙了一场。']);
+}
+
+// 引擎那几行是给面板看的，直接摆进正文就像读收据。
+// 常见的几种改写成人话，其余原样放过。
+function humanize(t){
+  let m;
+  if((m=t.match(/^与(.+?)的往来：好感 ([+-]?\d+)（现 (\d+)）$/))){
+    const d=+m[2], now=+m[3];
+    if(d>=6) return `跟${m[1]}走得近了些`;
+    if(d>0)  return `跟${m[1]}说上了几句话`;
+    if(d===0)return `${m[1]}不冷不热`;
+    return now<30?`${m[1]}如今见了你就绕道`:`${m[1]}对你冷了几分`;
   }
-  if(ev.plague&&ev.plague.dead.length) L.push(`瘟疫过境，${ev.plague.dead.join('、')}没了。`);
-  for(const t of (ev.npcEvents||[]).slice(0,2)) L.push(t+'。');
-  for(const n of (ev.news||[]).slice(0,2)) L.push(n.t+'。');
-  return L.join('');
+  if((m=t.match(/^(.+?)对你的观感：(\d+)$/))){
+    const v=+m[2];
+    return v>=70?`${m[1]}待你很有几分看重`:(v>=45?`${m[1]}待你还算客气`:(v>=25?`${m[1]}对你淡淡的`:`${m[1]}明摆着不待见你`));
+  }
+  if((m=t.match(/^(.+?)的态度：([+-]?\d+)（现 (\d+)）$/))){
+    return (+m[2])>0?`${m[1]}那边松了些口`:`${m[1]}那边脸色不大好看`;
+  }
+  if((m=t.match(/^(.+?)的情意：(\d+)$/))) return `${m[1]}看你的眼神不一样了`;
+  if((m=t.match(/^名望 \+(\d+)$/))) return +m[1]>=3?'名声比上月响了一截':'名声比上月响了一点';
+  if((m=t.match(/^虔诚 \+(\d+)$/))) return '心里比上月安稳些';
+  if((m=t.match(/^(.+?) 长了 (\d+)（现 (\d+)）$/))) return `${m[1]}这门手艺又长了些（${m[3]}）`;
+  return t;
+}
+function plainNarrative(action,j,ev,when){
+  const p=S.player;
+  const band=classRank(p.klass)>=4?'hi':(classRank(p.klass)>=2?'mid':'lo');
+  // 写的是刚过去的那个月。advanceMonth 已经把 S.month 推到下个月了。
+  const mo=(when&&when.m!=null)?when.m:((S.month+11)%12);
+  const yr=(when&&when.y)||(S.month===0?S.year-1:S.year);
+  const P=[];
+
+  // ── 第一段：这个月是什么光景，你做了什么，成没成 ──
+  const view=pick(MONTH_VIEW[mo][band]);
+  const head=pick([
+    `${yr}年的${MONTHS[mo]}。${view}。`,
+    `${MONTHS[mo]}。${view}。`,
+    `${MONTHS[mo]}里，${view}。`
+  ]);
+  const roll=rollSentence(j);
+  let para=head+actSentence(action,j.kind,p)+roll;
+
+  // 引擎算出来的结果接在后面。判定那句已经说过成没成了，就别让它再说一遍。
+  const out=(j.lines||[])
+    .filter(x=>x&&!/^\s*$/.test(String(x)))
+    .map(x=>String(x).replace(/[。]+$/,''))
+    .filter(x=>!(roll&&/^(事情办成了|事情没办成|办成了|没办成)$/.test(x)))
+    .map(humanize);
+  if(out.length){
+    // 一条就直接接上，两条以上才用个连接词，不然一句话也要「说得具体些」，别扭
+    const lead=out.length>1?pick(['','这一月的进出：','细算起来，']):'';
+    para+=lead+out.slice(0,3).join('；')+'。';
+    if(out.length>3) para+=out.slice(3,5).join('，')+'。';
+  }
+  P.push(para);
+
+  // ── 第二段：家里的事 ──
+  const home=[];
+  for(const b of (ev.birth||[])){
+    if(b.type==='知孕') home.push(pick([`${b.who}害喜了，算日子该是明年开春生`,`${b.who}有了身孕`]));
+    if(b.type==='临盆'){
+      if(b.babies&&b.babies.length) home.push(`${b.mother}临盆，生下${b.babies.map(x=>x.name).join('、')}${b.motherDead?'——人却没能挺过来':''}`);
+      else home.push(`${b.mother}临盆，孩子没能活下来${b.motherDead?'，她也跟着去了':''}`);
+    }
+  }
+  if(ev.plague&&ev.plague.dead&&ev.plague.dead.length)
+    home.push(`瘟疫过了一遍村子，${ev.plague.dead.join('、')}都没了`);
+  for(const t of (ev.npcEvents||[]).slice(0,2)) home.push(String(t).replace(/[。]+$/,''));
+  if(home.length) P.push(home.join('。')+'。');
+
+  // ── 第三段：外头的风声 ──
+  const feast=FEASTS.map(f=>f[0]);
+  const news=(ev.news||[])
+    .map(n=>String(n.t).replace(/[。]+$/,''))
+    .filter(t=>feast.indexOf(t)<0)          // 时令开头已经写过了，不重复
+    .slice(0,2);
+  if(news.length){
+    P.push(pick(['村里传着一件事：','外头的消息：','有人从镇上带回话来：','路过的行脚商说：'])
+      +news.join('；另有人说，')+'。');
+  }
+  return P.join('\n');
 }
 /* ================= 合并模型产出 ================= */
 const KLASS_OK=new Set(CLASS_ORDER);
@@ -2530,8 +2716,9 @@ function applyLLM(d){
 }
 
 /* ================= 章节 ================= */
-function pushChapter(text,summary,lines){
-  const c={date:`${S.year}年${MONTHS[S.month]}`, xun:XUN[rnd(0,2)], text:String(text||''),
+function pushChapter(text,summary,lines,when){
+  const y=(when&&when.y)||S.year, mo=(when&&when.m!=null)?when.m:S.month;
+  const c={date:`${y}年${MONTHS[mo]}`, xun:XUN[rnd(0,2)], text:String(text||''),
     summary:String(summary||'').slice(0,30), lines:lines||[], age:S.player.age};
   S.chapters.push(c);
   if(S.chapters.length>200) S.chapters.shift();
@@ -2595,6 +2782,7 @@ async function doTurn(action,kind,big){
   if(busy||S.over) return;
   setBusy(true,'修士正在誊抄这一月……');
   try{
+    const when={y:S.year, m:S.month};      // 记事写的是这个月，别被下面的推进带跑
     const j=resolveAction(action,kind||'free',!!big);
     const ev=advanceMonth();
     const lines=lineHtml(j,ev);
@@ -2603,11 +2791,16 @@ async function doTurn(action,kind,big){
       try{
         const d=await llmTurn(turnPrompt(action,j,ev));
         applyLLM(d);
-        text=d.narrative||plainNarrative(action,j,ev);
+        text=d.narrative||plainNarrative(action,j,ev,when);
         if(d.summary) var summary=d.summary;
-      }catch(e){ console.warn(e); toast('模型没应声，这月用朴素笔法记下了'); text=plainNarrative(action,j,ev); }
-    }else text=plainNarrative(action,j,ev);
-    pushChapter(text, (typeof summary!=='undefined'?summary:action), lines);
+      }catch(e){ console.warn(e); toast('模型没应声，这月用朴素笔法记下了');
+        text=plainNarrative(action,j,ev,when);
+        lines.push(`<span class="chip dn">模型没应声，这月是本地文案</span>`); }
+    }else{
+      text=plainNarrative(action,j,ev,when);
+      if(S.turn<3) lines.push(`<span class="chip">没填 API key，走的是本地文案——填了 key 才有模型写的故事</span>`);
+    }
+    pushChapter(text, (typeof summary!=='undefined'?summary:action), lines, when);
     // 死亡与临盆之后的收尾
     if(ev.aging&&ev.aging.died) return endLife('寿数已尽');
     if(ev.plague&&ev.plague.self) return endLife('黑死病');
@@ -5170,6 +5363,12 @@ function bindUI(){
   $('sideMask').onclick=()=>{ $('sidebar').classList.remove('open'); $('sideMask').classList.remove('on'); };
   $('sendBtn').onclick=()=>{
     const v=$('freeInput').value.trim(); if(!v) return;
+    const vd=inputVerdict(v);
+    if(!vd.ok){
+      if(vd.why==='block') toast('这一类事，这本册子不记。换一件事做。');
+      else toast('这年头还没有这样东西。');
+      return;                                  // 不消耗这个月，输入框里的字也留着
+    }
     $('freeInput').value=''; doTurn(v,'free');
   };
   $('freeInput').onkeydown=e=>{ if(e.key==='Enter') $('sendBtn').click(); };
@@ -5198,7 +5397,7 @@ function bindUI(){
   $('cfgCancel').onclick=()=>$('settingsMask').classList.remove('on');
   $('cfgSave').onclick=()=>{
     cfg.base=$('cfgBase').value.trim()||'https://api.deepseek.com';
-    cfg.key=$('cfgKey').value.trim(); cfg.model=$('cfgModel').value.trim()||'deepseek-chat';
+    cfg.key=$('cfgKey').value.trim(); cfg.model=$('cfgModel').value.trim()||DEFAULT_MODEL;
     localStorage.setItem(LS_CFG,JSON.stringify(cfg));
     $('settingsMask').classList.remove('on'); save(); renderAll(); toast('存下了');
   };
