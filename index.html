@@ -287,6 +287,10 @@ button,input,select,textarea{font-family:inherit}
 .chead .cr{color:#9a958a;letter-spacing:1.5px;font-weight:400}
 .ctext{font-size:15.5px;line-height:2.1;text-align:justify;color:var(--ink);white-space:pre-wrap;padding:20px 24px 16px;position:relative;z-index:1}
 .ctext .fleuron{color:var(--gold);font-size:14px;margin-right:7px;letter-spacing:0;vertical-align:1px}
+/* 人物说的话：照武侠版的规矩，换色 + 方头括号 */
+.ctext q,.bub q{color:var(--blue);font-weight:600;font-style:normal;quotes:"「" "」"}
+.ctext q:before,.bub q:before{content:open-quote}
+.ctext q:after,.bub q:after{content:close-quote}
 .ctext:first-letter{}
 .clines{padding:10px 24px 13px;border-top:1px solid rgba(140,138,147,.28);
   display:flex;flex-wrap:wrap;gap:6px 9px;align-items:center;position:relative;z-index:1;
@@ -1348,7 +1352,9 @@ function histViolations(text){
 function rollCheck(attrVal, need, bonus){
   const die=d20();
   const val=Math.round(num(attrVal)+num(bonus)+(die-10.5)*4);
-  return {die, val, need, success:val>=need, crit:die===20, fumble:die===1};
+  // 掷 20 必成、掷 1 必败。所以再难的事也有一成的半，再稳的事也会翻船
+  const success = die===20 ? true : (die===1 ? false : val>=need);
+  return {die, val, need, success, crit:die===20, fumble:die===1};
 }
 function attrOf(p,k){ return num(p.attrs[k]); }
 function skillLv(p,k){ return p.skills&&p.skills[k]?num(p.skills[k].level):0; }
@@ -2241,16 +2247,37 @@ function resolveAction(action, kind, big){
     j.lines.push(k?`身份变了：如今是${p.klass}${p.title?'·'+p.title:''}`:'火候还差着一点');
   }
   else {
-    // 自由行动：按最高属性做一次通用判定
+    // 自由行动。「随心所欲」这一档不掷骰，照玩家写的推演；另外两档由命运骰子说了算。
     const best=ATTRS.slice().sort((a,b)=>attrOf(p,b)-attrOf(p,a))[0];
-    const c=rollCheck(attrOf(p,best), 55);
-    j.rolls.push(['行事',best,c]);
-    j.lines.push(c.success?'事情办成了':'事情没办成');
-    if(c.crit) j.lines.push('还顺带落了点意外的好处');
-    if(c.fumble) { p.hp=clamp(p.hp-rnd(2,8),1,100); j.lines.push('还惹了一身麻烦'); }
+    const attr=guessAttr(action)||best;
+    if((S.freedom||'mid')==='free'){
+      j.freeMode='comply'; j.freeOk=true;
+      j.lines.push('随心所欲：这件事照你写的办，不掷骰');
+    }else{
+      j.freeMode='roll';
+      const dc=(S.freedom==='strict')?62:55;
+      const c=rollCheck(attrOf(p,attr), dc);
+      j.rolls.push(['命运骰子',attr,c]);
+      j.freeOk=c.success;
+      j.lines.push(c.success?'这件事办成了':'这件事没办成');
+      if(c.crit) j.lines.push('还顺带落了点意外的好处');
+      if(c.fumble){ p.hp=clamp(p.hp-rnd(2,8),1,100); j.lines.push('还惹了一身麻烦'); }
+    }
   }
   if(big) S.quarterUsed=true;
   return j;
+}
+const FREE_ATTR=[
+  [/打架|动手|干架|械斗|决斗|拼命|砍|杀|揍|夺|抢|挥刀|拔剑|射箭|挽弓|上阵|守城|护住/,'武艺'],
+  [/骗|诓|套话|打听|探问|说服|劝|谈判|讲价|还价|商量|买通|行贿|贿|送礼|递话|告状|讼|状子|算计|瞒|藏起|偷|溜|跟踪|拉拢|挑拨|走门路|托人|说合/,'谋略'],
+  [/读书|写信|抄|记账|算|账目|求学|查一查|考|拉丁|神学|医|开方|起草|拟/,'学识'],
+  [/求见|引见|示好|讨好|献殷勤|求亲|提亲|求婚|示爱|打扮|赴宴|跳舞|唱|献艺|露面/,'仪容'],
+  [/赶路|扛|背着|挑水|搬|挖|砍柴|下地|耕|收割|游过|爬上|熬|硬撑|苦力|出力|抡/,'体质']
+];
+function guessAttr(t){
+  const s=String(t||'');
+  for(const x of FREE_ATTR) if(x[0].test(s)) return x[1];
+  return null;
 }
 function pickStudySkill(p){
   const want=[];
@@ -2360,7 +2387,8 @@ function worldRules(){
 【文风】用大白话写，像一个人坐在对面跟你讲这个月发生了什么。句子有长短，别端着。
 不要排比，不要"首先其次"，不要在结尾升华总结，不要形容词堆砌，不要文绉绉的书面腔和半文半白。
 多写具体的东西：价钱、气味、天气、谁说了什么、手上在干什么活。
-人物讲话要符合身份，农夫不会引用亚里士多德，也不会说"倒也无妨"这种腔调。`;
+人物讲话要符合身份，农夫不会引用亚里士多德，也不会说"倒也无妨"这种腔调。
+【标点】凡是人物开口说的话，一律用「」括起来，一句一括。不要用引号、破折号、冒号引语，也不要把说话和旁白混在一句里。`;
 }
 function rosterBlock(){
   const r=rosterText();
@@ -2422,6 +2450,23 @@ function judgeBlock(j,ev){
   }
   return L.join('\n')||'· 本月平淡无事';
 }
+// 玩家自己打的字，跟点选项不是一回事：要么全力配合他推演，要么照命运骰子的点数办
+function freeBlock(j){
+  if(!j||j.kind!=='free'||!j.freeMode) return '';
+  if(j.freeMode==='comply') return `
+【这是玩家自己打字写的行动，当前口径「随心所欲」】
+当他写的这件事确实发生了来写，整个月围着它铺开——他想做的，就让他做成。
+但世界的规矩一步不让：没有超自然，没有后世的东西，钱粮、身份、路程、季节该卡还卡，名录之外的历史人物不许出现。
+他没写到的地方你来补：谁在场、花了多少钱、旁人当场什么反应、这事留下什么后患。
+要是他写的事以这个身份根本够不着（一个佃农要面见国王），不要驳回，改成"他今天能够到的那一步"来写，并写清是被什么挡在外头的。
+`;
+  return `
+【这是玩家自己打字写的行动，命运骰子已经掷过了】
+上面判定里那一条就是结果：${j.freeOk?'这件事他办成了':'这件事他没办成'}。照着写，不许反转。
+${j.freeOk?'写清他是怎么办成的、谁搭了手、付了什么代价、旁人怎么看。':'写清他卡在哪一步、谁挡的、当场落到什么地步。别把这个月写成什么都没发生——没办成也要往前推一步，哪怕只是摸清了下回该找谁。'}
+他没写到的细节你来补，但不要另起炉灶去讲别的事。
+`;
+}
 function turnPrompt(action,j,ev){
   return `${worldRules()}
 
@@ -2438,6 +2483,7 @@ ${recentBlock()}
 【主角本月的行动】${action}
 【引擎判定（已成定局，必须如实体现，不得反转）】
 ${judgeBlock(j,ev)}
+${freeBlock(j)}
 
 写本月的记事。要求：
 - 正文 700—1000 字，分三到五段，紧接上月结尾：地点、在场的人、悬着的事都要接上，除非行动本身就是离开。
@@ -2779,13 +2825,20 @@ function pushChapter(text,summary,lines,when){
   if(S.chapters.length>200) S.chapters.shift();
   renderStory(true);
 }
+// 把人物说的话挑出来上色。esc 之后再动手，所以直引号这时已经是 &quot;
+function markSpeech(h){
+  return String(h||'')
+    .replace(/「([^「」\n]{1,160})」/g,'<q>$1</q>')
+    .replace(/“([^“”\n]{1,160})”/g,'<q>$1</q>')
+    .replace(/&quot;([^&\n]{1,160})&quot;/g,'<q>$1</q>');
+}
 function narrHtml(t){
   t=String(t||'').trim();
   if(!t) return '';
   const first=t[0];
-  if(!/[\u4e00-\u9fa5]/.test(first)) return esc(t);
+  if(!/[\u4e00-\u9fa5]/.test(first)) return markSpeech(esc(t));
   // 中文没法像拉丁文那样把头一个字母放大——一放大就把词拆了。改用一朵花饰领起。
-  return `<span class="fleuron">❧</span>`+esc(t);
+  return `<span class="fleuron">❧</span>`+markSpeech(esc(t));
 }
 function renderStory(scrollEnd){
   const box=$('storyInner'), sc=$('story');
@@ -3354,7 +3407,7 @@ function kindCheck(kind){
 // rollCheck 是 val+(骰-10.5)*4 >= dc，二十面直接数出来，省得玩家猜
 function kindChance(kind){
   const c=kindCheck(kind); if(!c) return null;
-  let hit=0; for(let d=1;d<=20;d++) if(c.val+(d-10.5)*4>=c.dc) hit++;
+  let hit=0; for(let d=1;d<=20;d++) if(d===20||(d!==1&&c.val+(d-10.5)*4>=c.dc)) hit++;
   return {attr:c.attr, pct:hit*5};
 }
 const KIND_NOTE={
@@ -4328,7 +4381,7 @@ function renderConvo(){
   $('cvBody').innerHTML=C.msgs.map(m=>{
     if(m.who==='sys') return `<div class="bub sys">${esc(m.t)}</div>`;
     if(m.who==='me') return `<div class="bub me"><div class="who">你</div>${esc(m.t)}</div>`;
-    return `<div class="bub them"><div class="who">${esc(n?n.name:'')}</div>${esc(m.t)}</div>`;
+    return `<div class="bub them"><div class="who">${esc(n?n.name:'')}</div>${markSpeech(esc(m.t))}</div>`;
   }).join('');
   $('cvBody').scrollTop=$('cvBody').scrollHeight;
   const q=$('cvQuick'); q.innerHTML='';
