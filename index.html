@@ -311,7 +311,7 @@ button,input,select,textarea{font-family:inherit}
 .inkball:nth-child(2){animation-delay:.15s} .inkball:nth-child(3){animation-delay:.3s}
 @keyframes ib{0%,80%,100%{transform:scale(.4);opacity:.3}40%{transform:scale(1);opacity:1}}
 
-#choices{padding:0 30px;position:relative;z-index:1;flex:0 0 auto;min-height:0;max-height:48vh;overflow-y:auto;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent)}
+#choices{padding:0 30px;position:relative;z-index:1;flex:0 0 auto;min-height:0;overflow:visible}
 #choicesInner{max-width:860px;margin:0 auto;padding-bottom:8px}
 .optgroup{display:flex;align-items:center;gap:10px;margin:13px 0 8px;font-size:11px;letter-spacing:4px;color:var(--gold2)}
 .optgroup:before{content:"❧";font-size:12px;letter-spacing:0;color:var(--gold);flex:none;transform:translateY(-1px)}
@@ -343,9 +343,20 @@ button,input,select,textarea{font-family:inherit}
 .opt.big:hover{background:linear-gradient(180deg,#f8f3e2,#e7e0cc)}
 .opt:disabled{opacity:.42;cursor:not-allowed;transform:none}
 @media(max-width:1100px){ .optgrid{grid-template-columns:1fr} }
+.optgrid.one{grid-template-columns:1fr}
+.opt .ochk{font-size:11px;letter-spacing:.5px;flex:none;padding:1px 7px;border-radius:2px;white-space:nowrap;
+  background:rgba(41,69,110,.08);border:1px solid rgba(41,69,110,.3);color:var(--blue)}
+.opt.arc:before{background:linear-gradient(180deg,var(--gold2),var(--gold))}
+.opt.arc .og{color:#7d6528;background:rgba(169,139,72,.16);border-color:rgba(169,139,72,.42)}
+#goBtn{background:linear-gradient(180deg,#e9e5dc,#d5d0c2);color:var(--ink);border:1px solid #a8a294;
+  padding:0 15px;border-radius:2px;font-size:13.5px;letter-spacing:2px;cursor:pointer;flex:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+#goBtn:hover{background:linear-gradient(180deg,#f4f1e9,#e2ded0)}
+#goBtn:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:560px){ .opt .ochk{font-size:10.5px;padding:1px 5px} #goBtn{padding:0 11px;letter-spacing:0} }
 @media(max-width:560px){
   #story{padding:14px 14px 4px;min-height:30vh}
-  #choices{padding:0 14px;max-height:43vh}
+  #choices{padding:0 14px}
   #inputbar{padding:8px 14px 12px}
   .opt{padding:7px 10px 7px 9px;font-size:13.5px}
   .opt .og{width:20px;height:20px;font-size:11px}
@@ -583,6 +594,7 @@ button,input,select,textarea{font-family:inherit}
     <div id="loading"><div class="inkball"></div><div class="inkball"></div><div class="inkball"></div><span id="loadingText">修士正在誊抄这一月……</span></div>
     <div id="choices"><div id="choicesInner"></div></div>
     <div id="inputbar"><div id="inputbarInner">
+      <button id="goBtn" title="这个月还能干些什么">去处</button>
       <input id="freeInput" placeholder="也可以直接打字，如：去教堂找神父打听联姻的事">
       <button id="sendBtn">行动</button>
     </div></div>
@@ -651,12 +663,15 @@ button,input,select,textarea{font-family:inherit}
   <div class="modal">
     <button class="modal-close" id="cfgCancel">×</button>
     <h2>设置</h2>
-    <div class="sub">叙事交给你自己的模型；不填也能玩，只是文笔朴素些</div>
+    <div class="sub">每月的记事是模型写的。没填好 key 开不了局</div>
     <div class="field"><label>接口地址</label><input id="cfgBase" placeholder="https://api.deepseek.com">
       <div class="hint">任何 OpenAI 兼容接口都行。DeepSeek：https://api.deepseek.com；智谱：https://open.bigmodel.cn/api/paas/v4</div></div>
     <div class="field"><label>API Key</label><input id="cfgKey" type="password" placeholder="sk-..."><div class="hint">只存在你自己浏览器里，不会发去别处。</div></div>
     <div class="field"><label>模型</label><input id="cfgModel" placeholder="deepseek-flash">
       <div class="hint">DeepSeek 现在用 <b>deepseek-flash</b>；<code>deepseek-chat</code> 和 <code>deepseek-reasoner</code> 已经停了。智谱：glm-4-plus。留空按 deepseek-flash 走。</div></div>
+    <div class="field"><label>连通性</label>
+      <div class="mrow" style="margin-top:0"><button id="cfgTest">测试连接</button></div>
+      <div class="hint" id="cfgTestMsg">填好上面三项，点一下看通不通。</div></div>
     <div class="field"><label>难度</label>
       <div class="segs" id="cfgFreedom"><button data-v="free">随心所欲</button><button data-v="mid">传奇</button><button data-v="strict">写实</button></div>
       <div class="hint" id="cfgFreeNote"></div>
@@ -683,6 +698,16 @@ button,input,select,textarea{font-family:inherit}
     <div class="sub" id="askSub"></div>
     <div id="askBody" style="font-size:14.5px;line-height:1.9;text-align:justify;margin-bottom:12px"></div>
     <div id="askOpts" style="display:flex;flex-direction:column;gap:7px"></div>
+  </div>
+</div>
+
+<!-- 去处 -->
+<div class="modal-mask" id="goMask">
+  <div class="modal wide">
+    <button class="modal-close" id="goClose">×</button>
+    <h2>去 处</h2>
+    <div class="sub">挑一样，这个月就这么过去了</div>
+    <div id="goBody" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -2030,7 +2055,7 @@ function buildOptions(){
     const l=ladder(p);
     if(l.ok) bigs.push({t:`【大事】更进一步：${l.next}`,kind:'promote',big:true});
   }
-  return out.slice(0,6).concat(bigs);
+  return out.concat(bigs);      // 主区不再摆菜单，这里就不截了，「去处」抽屉要全列
 }
 
 /* ================= 引擎结算一个月 ================= */
@@ -2404,6 +2429,8 @@ ${rosterBlock()}
 
 ${playerBlock()}
 
+${goalBlock()}
+
 ${npcBlock()}
 
 ${recentBlock()}
@@ -2413,13 +2440,22 @@ ${recentBlock()}
 ${judgeBlock(j,ev)}
 
 写本月的记事。要求：
-- 正文 300—500 字，紧接上月结尾：地点、在场的人、悬着的事都要接上，除非行动本身就是离开。
+- 正文 700—1000 字，分三到五段，紧接上月结尾：地点、在场的人、悬着的事都要接上，除非行动本身就是离开。
+- 一个月要写成一场一场的戏，不是一段流水账概述：
+  · 至少两处有人开口说话，带上称呼、讨价还价、抱怨、脏话——各人怎么说话由他的身份定；
+  · 至少一处把手上干的活和眼前的东西写清楚（价钱、器物、天气、气味、身上哪儿疼）；
+  · 至少一处是主角一个人的时候：他在盘算什么、在看什么，用他自己想得出来的话写，不要文绉绉。
+  写长不是把一句话说三遍，是多写几件真发生的事。
 - 判定成败要落到具体的事上，不要只说"顺利"。钱要写清是几个先令几个便士。
 - 若名录里的历史事件正在发生，让它以普通人能感知的方式渗进来（谷价、征兵、路上的难民、教堂的钟、税吏），不要写成史书旁白。
 - 身边人要有自己的心思和动作，不能只当布景。
 - 新登场的人写进 newNpcs（一月最多 2 人，宁少勿滥），每人给一条 secret。
 - npcEvents 写 1—2 条身边人之间的事（嫁娶、交恶、生死、争产），要有前因。
-- options 给 3 条本月之后可做的事，短句，贴合主角身份与眼下处境。
+- options 恰好 3 条，每条 8—18 字。必须承接本段记事的结尾：是这段故事里的人、这个地方、这件悬着的事的下一步。
+  不许写泛泛的去处——"去集市看看""去教堂做弥撒""做工挣钱"这类每个月都能说的话，一条也不要。
+- 三条里至少 1 条朝着上面【人生目标】那一栏写的方向走，kind 用目标块里指的那几种。
+- 三条彼此要有取舍：一条稳当、一条冒险、一条走人情或走偏门。
+- kind 只能取 work/study/church/social/court/trade/fight/rest/free。
 
 ${JSON_RULE}
 输出格式：
@@ -2437,13 +2473,18 @@ ${rosterBlock()}
 
 ${playerBlock()}
 
+${goalBlock()}
+
 ${npcBlock()}
 
 引擎已经掷完骰、定好了这个人的一切。你要做三件事：
 1. appearance：把"${p.appearance}"扩写成两三句大白话相貌，符合${p.age}岁与${p.klass}的身份，不必好看。
-2. backstory：一段 140—220 字的身世，把出身、家里的营生、父母、以及${p.origin.type!=='嫡出'?'"'+p.origin.type+'"这件事':'童年'}讲清楚，落在具体的事上（一次挨打、一场丧事、一件旧衣、一笔债）。
-3. opening：一段 260—420 字的开场，时间是${S.year}年${MONTHS[S.month]}。写清楚眼下的地点、在场的人、正在发生的事，结尾留一个当下就要应付的麻烦。
+2. backstory：一段 300—420 字的身世，把出身、家里的营生、父母、以及${p.origin.type!=='嫡出'?'"'+p.origin.type+'"这件事':'童年'}讲清楚，落在具体的事上（一次挨打、一场丧事、一件旧衣、一笔债）。
+3. opening：一段 600—850 字、分三到四段的开场，时间是${S.year}年${MONTHS[S.month]}。写清楚眼下的地点、在场的人、正在发生的事。要有人开口说话，要有具体的东西（价钱、器物、天气、活计）。
+结尾留一个当下就要应付的麻烦——具体到某个人、某笔钱、某件东西，不要笼统的"前途未卜"。
 另外给身边每个人补一句 mood（此刻心里在想什么，12字内）。
+4. options 恰好 3 条，每条 8—18 字，必须承接 opening 结尾那个麻烦——是眼前这件事的下一步，
+   不许写"去集市看看""做工挣钱"这类每个月都能说的话。三条要有取舍：一条稳当、一条冒险、一条走人情。
 
 ${JSON_RULE}
 输出格式：
@@ -2461,7 +2502,7 @@ async function callLLM(prompt,maxTokens){
   if(!cfg.key) throw new Error('NOKEY');
   const body={model:cfg.model||DEFAULT_MODEL,
       messages:[{role:'user',content:prompt}],
-      temperature:0.85, max_tokens:maxTokens||2200};
+      temperature:0.85, max_tokens:maxTokens||3200};
   // deepseek-flash 不指定就是开着思考模式的。这里只要它写故事，不要它先想半天，
   // 既慢又多花钱。别的厂家的接口不认这个字段，所以只对 DeepSeek 发。
   if(isDeepSeek()) body.thinking={type:'disabled'};
@@ -2496,12 +2537,12 @@ async function llmJSON(prompt,maxTokens){
 }
 // 历史穿帮闸门：抓到名录外的历史人名就重来一次
 async function llmTurn(prompt){
-  let d=await llmJSON(prompt,2400);
+  let d=await llmJSON(prompt,4600);
   const text=[d.narrative,d.opening,(d.npcEvents||[]).join(''),(d.rumors||[]).join('')].join('');
   const bad=histViolations(text);
   if(bad.length){
     console.warn('[史实闸门] 名录外人物：',bad);
-    d=await llmJSON(prompt+`\n\n注意：上一次你写进了名录之外的历史人物「${bad.join('、')}」，${S.year}年他们或未生、或已故、或不在此地。重写，改用虚构人物。`,2400);
+    d=await llmJSON(prompt+`\n\n注意：上一次你写进了名录之外的历史人物「${bad.join('、')}」，${S.year}年他们或未生、或已故、或不在此地。重写，改用虚构人物。`,4600);
     const bad2=histViolations([d.narrative,d.opening].join(''));
     if(bad2.length){ for(const nm of bad2){ const fake=makeName(S.region,'男',S.player.klass,null).full;
       if(d.narrative) d.narrative=d.narrative.split(nm).join(fake);
@@ -2726,7 +2767,7 @@ function applyLLM(d){
     if(typeof o==='string') return {t:o.slice(0,34),kind:'free'};
     return o&&o.t?{t:String(o.t).slice(0,34), kind:String(o.kind||'free')}:null;
   }).filter(Boolean).slice(0,3);
-  if(opts.length) S.llmOptions=opts;
+  S.llmOptions=opts;              // 没给就置空，主区自动退回引擎垫底的三条，不留上个月的旧选项
 }
 
 /* ================= 章节 ================= */
@@ -2798,6 +2839,7 @@ function setBusy(b,txt){
   busy=b; $('loading').classList.toggle('on',b);
   if(txt) $('loadingText').textContent=txt;
   $('sendBtn').disabled=b;
+  if($('goBtn')) $('goBtn').disabled=b;
   Array.from(document.querySelectorAll('.opt')).forEach(x=>x.disabled=b);
 }
 async function doTurn(action,kind,big){
@@ -2805,6 +2847,7 @@ async function doTurn(action,kind,big){
   setBusy(true,'修士正在誊抄这一月……');
   try{
     const when={y:S.year, m:S.month};      // 记事写的是这个月，别被下面的推进带跑
+    S.llmOptions=null;                     // 上个月的三条到此为止；模型没应声就用引擎垫底的
     const j=resolveAction(action,kind||'free',!!big);
     const ev=advanceMonth();
     const lines=lineHtml(j,ev);
@@ -2820,7 +2863,7 @@ async function doTurn(action,kind,big){
         lines.push(`<span class="chip dn">模型没应声，这月是本地文案</span>`); }
     }else{
       text=plainNarrative(action,j,ev,when);
-      if(S.turn<3) lines.push(`<span class="chip">没填 API key，走的是本地文案——填了 key 才有模型写的故事</span>`);
+      lines.push(`<span class="chip dn">API key 不见了，这月是本地文案——去「设置」里补上</span>`);
     }
     pushChapter(text, (typeof summary!=='undefined'?summary:action), lines, when);
     // 死亡与临盆之后的收尾
@@ -3292,45 +3335,140 @@ function showNpc(id){
   acts.appendChild(c);
   $('npcMask').classList.add('on');
 }
+/* ================= 选项 =================
+   主区只放三条，全是模型贴着刚读完那段故事写的；引擎那张菜单收进「去处」抽屉。
+   这是 v0.8 的要害：选项回到模型手里，玩家读完故事看到的是这段故事的下一句。 */
+
+// 各 kind 在 resolveAction 里用的属性与难度，抽出来给选项标成算
+function kindCheck(kind){
+  const p=S.player; if(!p) return null;
+  if(kind==='work')   return {attr:'体质谋略', val:attrOf(p,'体质')*0.6+attrOf(p,'谋略')*0.4+itemEff(p,'work')+craftValue(p)*0.35, dc:50};
+  if(kind==='study')  return {attr:'学识',     val:attrOf(p,'学识')+itemEff(p,'study')+scholarValue(p), dc:55-(p.literate?8:0)};
+  if(kind==='church') return {attr:'虔诚',     val:num(p.piety)+itemEff(p,'piety'), dc:50};
+  if(kind==='social') return {attr:'仪容谋略', val:attrOf(p,'仪容')*0.4+attrOf(p,'谋略')*0.6+charmValue(p), dc:55+(p.infamy>=45?8:0)};
+  if(kind==='court')  return {attr:'谋略学识', val:attrOf(p,'谋略')*0.6+attrOf(p,'学识')*0.4+(skillLv(p,'纹章学')+skillLv(p,'交际舞'))*0.15+itemEff(p,'court'), dc:58};
+  if(kind==='trade')  return {attr:'谋略账目', val:attrOf(p,'谋略')*0.5+skillLv(p,'账目')+skillLv(p,'算数')*0.5+itemEff(p,'trade'), dc:58};
+  if(kind==='free'){ const b=ATTRS.slice().sort((x,y)=>attrOf(p,y)-attrOf(p,x))[0]; return {attr:b, val:attrOf(p,b), dc:55}; }
+  return null;
+}
+// rollCheck 是 val+(骰-10.5)*4 >= dc，二十面直接数出来，省得玩家猜
+function kindChance(kind){
+  const c=kindCheck(kind); if(!c) return null;
+  let hit=0; for(let d=1;d<=20;d++) if(c.val+(d-10.5)*4>=c.dc) hit++;
+  return {attr:c.attr, pct:hit*5};
+}
+const KIND_NOTE={
+  work:'出力挣一笔钱，凭体质与谋略；不顺当会累出病',
+  study:'长一门学问；不识字的，先从认字起',
+  church:'虔诚往上走，堂里的上司会记着你来过',
+  social:'与身边人走动，好感与名望各涨一点，要花钱',
+  market:'去集市，买卖些什物',
+  estate:'去庄上，料理佃户与收成',
+  court:'在主君（或主教）跟前露脸，涨他的好感',
+  trade:'押上三成家财做一笔买卖，赚赔都算得出',
+  fight:'随军出征，另起一场战阵，有死伤之虞',
+  rest:'将养身子，健康回一截',
+  road:'赶路，一个月就这么过去',
+  roadrest:'在客舍歇一晚，健康回一点',
+  roadtalk:'跟同路的香客搭话'
+};
+// 主线（C 阶段才写）没到位之前，先按人生目标粗分一下该往哪个方向走
+const GOAL_KINDS={'跻身贵族':['court','social'],'富甲一方':['trade','market'],'位列教阶':['church','study'],
+  '名垂青史':['fight','social','study'],'觅得真爱':['social'],'嫁入高门':['social','court'],'平安到老':['rest','work']};
+const GOAL_HINT={'跻身贵族':'也可以直接打字，如：去主君厅里递一封信',
+  '富甲一方':'也可以直接打字，如：找羊毛贩子问今年的价',
+  '位列教阶':'也可以直接打字，如：去修道院求见副院长',
+  '名垂青史':'也可以直接打字，如：请行吟诗人把这桩事编成歌',
+  '觅得真爱':'也可以直接打字，如：托人给她捎一样东西',
+  '嫁入高门':'也可以直接打字，如：请婶母在筵席上替我引见',
+  '平安到老':'也可以直接打字，如：先把今年的欠租清了'};
+function arcStageSafe(){ try{ if(typeof arcStage==='function') return arcStage(); }catch(_){} return null; }
+function arcKinds(){
+  const a=arcStageSafe(); if(a&&a.kinds&&a.kinds.length) return a.kinds;
+  const g=S.player&&S.player.goal&&S.player.goal.k;
+  return GOAL_KINDS[g]||[];
+}
+function arcBigKind(){ const a=arcStageSafe(); return (a&&a.bigKind)||null; }
+function inputHint(){
+  const a=arcStageSafe(); if(a&&a.hint) return a.hint;
+  const g=S.player&&S.player.goal&&S.player.goal.k;
+  return GOAL_HINT[g]||'也可以直接打字，如：去教堂找神父打听联姻的事';
+}
+// 给模型的目标块
+function goalBlock(){
+  const p=S.player; if(!p) return '';
+  if(!p.goal) return '【人生目标】尚未立志。';
+  let t='【人生目标】'+p.goal.k+'——'+p.goal.d+'。';
+  const a=arcStageSafe();
+  if(a&&a.name) t+='\n现在走到第 '+a.n+'/'+a.N+' 步：'+a.name+'。';
+  try{ const h=goalHint(p); if(h) t+='\n还差：'+h; }catch(_){}
+  const ks=arcKinds();
+  if(ks.length) t+='\n本月的 options 里至少一条要朝这个目标走，kind 取 '+ks.join(' / ')+'。';
+  return t;
+}
+// 没 key、或模型没给够三条时垫底；优先挑和目标沾边的
+function fallbackOptions(n){
+  const want=arcKinds();
+  const base=buildOptions().filter(o=>!o.big);
+  const pri=base.filter(o=>want.indexOf(o.kind)>=0);
+  let rest=base.filter(o=>want.indexOf(o.kind)<0);
+  // 没 key 的时候若每月都端同样三条，又成了菜单。按月转一格
+  if(rest.length){ const k=(S.turn||0)%rest.length; rest=rest.slice(k).concat(rest.slice(0,k)); }
+  return pri.concat(rest).slice(0,n||3);
+}
+function mkOpt(o,withNote){
+  const b=document.createElement('button');
+  b.className='opt'+(o.big?' big':'')+(o.arc?' arc':'');
+  const raw=String(o.t).replace(/^【大事】/,'');
+  const i=raw.indexOf('：');
+  const head=(o.big&&i>0)?raw.slice(0,i):raw;
+  let tail=(o.big&&i>0)?raw.slice(i+1):'';
+  if(withNote&&!tail) tail=(o.note||KIND_NOTE[o.kind]||'').trim();
+  const ch=kindChance(o.kind);
+  b.innerHTML='<span class="og">'+(OPT_GLYPH[o.kind]||'·')+'</span>'
+    +'<span class="ot"><b>'+esc(head)+'</b>'+(tail?'<i>'+esc(tail)+'</i>':'')+'</span>'
+    +(ch?'<span class="ochk">🎲 '+esc(ch.attr)+' · 约'+ch.pct+'%</span>':'');
+  b.onclick=()=>{ closeGo(); doTurn(raw,o.kind,!!o.big); };
+  return b;
+}
 function renderOptions(){
   const box=$('choicesInner'); box.innerHTML='';
+  const fi=$('freeInput'); if(fi) fi.placeholder=inputHint();
   if(S.over){ box.innerHTML='<div style="text-align:center;color:#c3ad84;padding:8px">这一世已经过完了。</div>'; return; }
-  const base=buildOptions();
-  const llm=(S.llmOptions||[]).map(o=>({t:o.t,kind:o.kind,llm:true}));
-  const bigs=base.filter(o=>o.big);
-  // 模型给的是贴着眼下处境写的，排在前面；常规那几条垫后。一共不超过 6 条——
-  // 手机上再多就把正文挤没了。
-  const seen={};
-  const plain=llm.concat(base.filter(o=>!o.big))
-    .filter(o=>{ const k=String(o.t).replace(/\s/g,''); if(seen[k]) return false; seen[k]=1; return true; })
-    .slice(0,6);
-  const mk=(o)=>{
-    const b=document.createElement('button');
-    b.className='opt'+(o.big?' big':'');
-    const raw=o.t.replace(/^【大事】/,'');
-    const i=raw.indexOf('：');
-    const head=(o.big&&i>0)?raw.slice(0,i):raw;
-    const tail=(o.big&&i>0)?raw.slice(i+1):'';
-    b.innerHTML=`<span class="og">${OPT_GLYPH[o.kind]||'·'}</span>`
-      +`<span class="ot"><b>${esc(head)}</b>${tail?`<i>${esc(tail)}</i>`:''}</span>`
-      +(o.note?`<span class="oc">${esc(o.note)}</span>`:'');
-    b.onclick=()=>doTurn(raw,o.kind,!!o.big);
-    return b;
-  };
-  if(plain.length){
-    const g=document.createElement('div'); g.className='optgrid';
-    for(const o of plain) g.appendChild(mk(o));
-    box.appendChild(g);
-  }
-  if(bigs.length){
-    const h=document.createElement('div'); h.className='optgroup';
-    h.innerHTML='本季大事<span class="fill"></span><small>一季只办得成一桩</small>';
-    box.appendChild(h);
-    const g=document.createElement('div'); g.className='optgrid';
-    for(const o of bigs) g.appendChild(mk(o));
-    box.appendChild(g);
-  }
+  const seen={}, list=[];
+  const push=o=>{ if(!o||!o.t||list.length>=3) return;
+    const k=String(o.t).replace(/\s/g,''); if(seen[k]) return; seen[k]=1; list.push(o); };
+  for(const o of (S.llmOptions||[])) push({t:o.t, kind:o.kind||'free', llm:true});
+  if(list.length<3) for(const o of fallbackOptions(8)) push(o);
+  const g=document.createElement('div'); g.className='optgrid one';
+  for(const o of list) g.appendChild(mkOpt(o));
+  box.appendChild(g);
 }
+// 「去处」：v0.7 主区那张菜单原样搬进来，一条不少
+function openGo(){
+  if(busy||S.over) return;
+  const box=$('goBody'); box.innerHTML='';
+  const base=buildOptions();
+  const plain=base.filter(o=>!o.big), bigs=base.filter(o=>o.big);
+  const grp=(t,note)=>{ const h=document.createElement('div'); h.className='optgroup';
+    h.innerHTML=t+'<span class="fill"></span><small>'+note+'</small>'; box.appendChild(h); };
+  grp('常事','一个月只办得成一件');
+  const g1=document.createElement('div'); g1.className='optgrid one';
+  for(const o of plain) g1.appendChild(mkOpt(o,true));
+  box.appendChild(g1);
+  if(bigs.length){
+    grp('本季大事','一季只办得成一桩');
+    const want=arcBigKind();
+    const sorted=bigs.slice().sort((a,b)=>((b.kind===want)?1:0)-((a.kind===want)?1:0));
+    const g2=document.createElement('div'); g2.className='optgrid one';
+    for(const o of sorted){ if(want&&o.kind===want) o.arc=true; g2.appendChild(mkOpt(o,true)); }
+    box.appendChild(g2);
+  }else{
+    grp('本季大事','这一季的那一桩已经办过了');
+  }
+  $('goMask').classList.add('on');
+}
+function closeGo(){ const m=$('goMask'); if(m) m.classList.remove('on'); }
 const OPT_GLYPH={work:'锤',study:'书',church:'十',social:'杯',court:'冠',trade:'钱',fight:'剑',rest:'榻',
   marry:'环',child:'摇',promote:'阶',guild:'徽',laicize:'俗',market:'市',estate:'田',buyland:'契',
   will:'遗',pilgrim:'杖',road:'路',roadrest:'宿',roadtalk:'语'};
@@ -4284,7 +4422,7 @@ async function convoSay(text, intentKey){
   let reply='';
   if(cfg.key){
     try{
-      const d=await llmJSON(convoPrompt(n,text,eff),700);
+      const d=await llmJSON(convoPrompt(n,text,eff),1000);
       reply=String(d.reply||'').slice(0,160);
       if(d.mood) n.mood=String(d.mood).slice(0,14);
       if(d.reveal&&n.secret) eff.reveal=true;
@@ -4318,7 +4456,8 @@ ${S.chapters.slice(-2).map(c=>c.date+'：'+c.summary).join('；')}
 【主角刚说】「${said}」
 【引擎判定】这句话${eff.c.success?'说到了点上':'没说好'}（掷骰${eff.c.die}，${eff.c.val}／${eff.c.need}）。好感变化 ${eff.fav}。
 
-只写${n.name}的回话，一到三句，带引号。要符合他/她的身份、年纪、心境和这个年代的说话方式——农夫不会引经据典，修士不会满嘴粗话。不写旁白，不写主角的反应，不用现代词。
+只写${n.name}的回话，两到四句，带引号。话里带上他此刻手上在做什么、眼睛看哪儿、语气怎么样（这些写在引号外，夹在话中间）。
+要符合他/她的身份、年纪、心境和这个年代的说话方式——农夫不会引经据典，修士不会满嘴粗话。不写主角的反应，不用现代词。
 
 ${JSON_RULE}
 输出格式：{"reply":"「……」","mood":"此刻心里在想什么，12字内","reveal":false}
@@ -5329,6 +5468,11 @@ function openCreate(){
 }
 const ERA_START={'1300':1300,'1330':1330,'1345':1345,'1365':1365,'1380':1380};
 async function startNewGame(){
+  if(!cfg.key){                                  // 没模型就没故事，这游戏剩不下什么
+    $('createMask').classList.remove('on');
+    openSettings('先把 API key 填上、测通了，再来投胎。');
+    return;
+  }
   $('createMask').classList.remove('on');
   S=newStateShell();
   S.runId='r'+Date.now().toString(36);
@@ -5348,8 +5492,8 @@ async function startNewGame(){
   if(cfg.key){
     try{
       const d=await llmTurn(initPrompt());
-      if(d.appearance) S.player.appearance=String(d.appearance).slice(0,120);
-      if(d.backstory) S.player.backstory=String(d.backstory).slice(0,420);
+      if(d.appearance) S.player.appearance=String(d.appearance).slice(0,260);
+      if(d.backstory) S.player.backstory=String(d.backstory).slice(0,900);
       opening=d.opening||'';
       if(d.scene&&d.scene.location) S.scene={location:d.scene.location,unresolved:asArr(d.scene.unresolved)};
       for(const m of asArr(d.moods)){ const n=S.npcs.find(x=>x.name===m.name); if(n&&m.mood) n.mood=String(m.mood).slice(0,16); }
@@ -5378,6 +5522,66 @@ function plainOpening(){
    `${S.npcs.filter(n=>n.alive).slice(0,3).map(n=>`${n.name}（${n.rel}）在旁边`).join('，')}。日子还得往下过。`;
 }
 
+/* ================= 设置面板与连接自测 ================= */
+function openSettings(msg){
+  $('cfgBase').value=cfg.base||''; $('cfgKey').value=cfg.key||''; $('cfgModel').value=cfg.model||'';
+  const box=$('cfgFreedom');
+  Array.from(box.querySelectorAll('button')).forEach(b=>{
+    b.classList.toggle('on', b.dataset.v===((S&&S.freedom)||'mid'));
+    b.onclick=()=>{ Array.from(box.querySelectorAll('button')).forEach(x=>x.classList.remove('on')); b.classList.add('on');
+      if(S) S.freedom=b.dataset.v; freeNote(b.dataset.v,'cfgFreeNote'); };
+  });
+  freeNote((S&&S.freedom)||'mid','cfgFreeNote');
+  setTestMsg(msg||'填好上面三项，点一下看通不通。');
+  $('settingsMask').classList.add('on');
+}
+function setTestMsg(t,cls){
+  const el=$('cfgTestMsg'); if(!el) return;
+  el.textContent=t;
+  el.style.color = cls==='ok' ? 'var(--green)' : (cls==='bad' ? 'var(--red)' : 'var(--ink3)');
+}
+// 拿填在框里的那三项真发一次请求。不改已存的 cfg，测通了再让他自己点「存下」
+async function testConn(){
+  const base=($('cfgBase').value.trim()||'https://api.deepseek.com').replace(/\/+$/,'');
+  const key=$('cfgKey').value.trim();
+  const model=$('cfgModel').value.trim()||DEFAULT_MODEL;
+  if(!key){ setTestMsg('API key 是空的。','bad'); return; }
+  const url=/\/v\d+$/.test(base) ? base+'/chat/completions' : base+'/v1/chat/completions';
+  const btn=$('cfgTest'); btn.disabled=true;
+  setTestMsg('正在试……');
+  const t0=Date.now();
+  try{
+    const body={model, messages:[{role:'user',content:'只回两个字：通了'}], max_tokens:16, temperature:0};
+    if(/(^|\.)deepseek\.com/i.test(base)) body.thinking={type:'disabled'};
+    const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),25000);
+    const res=await fetch(url,{method:'POST',signal:ctl.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify(body)});
+    clearTimeout(timer);
+    const raw=await res.text();
+    if(!res.ok){
+      let why=raw.slice(0,200);
+      try{ const e=JSON.parse(raw); why=(e.error&&(e.error.message||e.error.type))||why; }catch(_){}
+      const hint = res.status===401 ? 'key 不对或者过期了'
+                 : res.status===404 ? '模型名或接口地址不对'
+                 : res.status===402 ? '账户没余额了'
+                 : res.status===429 ? '被限流了，过会儿再试'
+                 : '接口返回 '+res.status;
+      setTestMsg('没通：'+hint+'。'+why,'bad');
+      return;
+    }
+    let d=null; try{ d=JSON.parse(raw); }catch(_){}
+    const txt=d&&d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content;
+    if(txt==null){ setTestMsg('接口通了，但回来的东西不像 OpenAI 那套格式：'+raw.slice(0,120),'bad'); return; }
+    const sec=((Date.now()-t0)/1000).toFixed(1);
+    setTestMsg('通了。'+(d.model||model)+' 回了「'+String(txt).replace(/\s+/g,'').slice(0,12)+'」，用了 '+sec+' 秒。记得点「存下」。','ok');
+  }catch(e){
+    const m=String(e&&e.message||e);
+    setTestMsg(/abort/i.test(m) ? '没通：25 秒没回应，接口地址八成不对。'
+      : '没通：'+m+'（多半是地址写错，或者这个接口不许网页直接调——跨域）','bad');
+  }finally{ btn.disabled=false; }
+}
+
 /* ================= 绑定 ================= */
 function bindUI(){
   Array.from($('tabs').querySelectorAll('button')).forEach(b=>{
@@ -5401,6 +5605,8 @@ function bindUI(){
     $('freeInput').value=''; doTurn(v,'free');
   };
   $('freeInput').onkeydown=e=>{ if(e.key==='Enter') $('sendBtn').click(); };
+  $('goBtn').onclick=openGo;
+  $('goClose').onclick=closeGo;
 
   segBind('crGender','gender',()=>renderAvatarPick());
   segBind('crClass','klass',()=>renderAvatarPick());
@@ -5412,23 +5618,20 @@ function bindUI(){
   $('crStart').onclick=()=>startNewGame();
   $('btnNew').onclick=()=>openCreate();
 
-  $('btnSettings').onclick=()=>{
-    $('cfgBase').value=cfg.base||''; $('cfgKey').value=cfg.key||''; $('cfgModel').value=cfg.model||'';
-    const box=$('cfgFreedom');
-    Array.from(box.querySelectorAll('button')).forEach(b=>{
-      b.classList.toggle('on', b.dataset.v===((S&&S.freedom)||'mid'));
-      b.onclick=()=>{ Array.from(box.querySelectorAll('button')).forEach(x=>x.classList.remove('on')); b.classList.add('on');
-        if(S) S.freedom=b.dataset.v; freeNote(b.dataset.v,'cfgFreeNote'); };
-    });
-    freeNote((S&&S.freedom)||'mid','cfgFreeNote');
-    $('settingsMask').classList.add('on');
+  $('btnSettings').onclick=()=>openSettings();
+  $('cfgTest').onclick=()=>testConn();
+  $('cfgCancel').onclick=()=>{
+    if(!cfg.key&&!(S&&S.player)){ toast('得先填上 API key'); return; }   // 还没开局就别想溜
+    $('settingsMask').classList.remove('on');
   };
-  $('cfgCancel').onclick=()=>$('settingsMask').classList.remove('on');
   $('cfgSave').onclick=()=>{
     cfg.base=$('cfgBase').value.trim()||'https://api.deepseek.com';
     cfg.key=$('cfgKey').value.trim(); cfg.model=$('cfgModel').value.trim()||DEFAULT_MODEL;
     localStorage.setItem(LS_CFG,JSON.stringify(cfg));
-    $('settingsMask').classList.remove('on'); save(); renderAll(); toast('存下了');
+    if(!cfg.key){ setTestMsg('API key 还空着——填上才能开局。','bad'); return; }
+    $('settingsMask').classList.remove('on'); save();
+    if(S&&S.player){ renderAll(); toast('存下了'); }
+    else openCreate();                                   // 刚填完 key，直接去投胎
   };
   $('cfgWipe').onclick=()=>{
     if(!confirm('存档、历代家史都会清掉，确定？')) return;
@@ -5457,7 +5660,12 @@ function bindUI(){
     r.readAsText(f); e.target.value='';
   };
   Array.from(document.querySelectorAll('.modal-mask')).forEach(m=>{
-    m.onclick=e=>{ if(e.target===m&&m.id!=='createMask'&&m.id!=='askMask'&&m.id!=='deathMask') m.classList.remove('on'); };
+    m.onclick=e=>{
+      if(e.target!==m) return;
+      if(m.id==='createMask'||m.id==='askMask'||m.id==='deathMask') return;
+      if(m.id==='settingsMask'&&!cfg.key&&!(S&&S.player)) return;   // 还没填 key，点背景也别想跑
+      m.classList.remove('on');
+    };
   });
 }
 
@@ -5466,6 +5674,8 @@ function bindUI(){
   bindUI();
   if(load()){ renderAll(); renderStory(true);
     if(S.over) toast('这一世已经过完了，可以另起一世');
+  }else if(!cfg.key){
+    openSettings('这游戏每月的记事是模型写的。填一个 OpenAI 兼容接口的 key，测通了才能开局。');
   }else{
     openCreate();
   }
