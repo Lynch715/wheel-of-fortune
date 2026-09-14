@@ -1,0 +1,27 @@
+# ===== 美术原图不进仓库 =====
+# 游戏是单文件：图都已经压成 WebP base64 嵌在 index.html 里，
+# 原图留在本地（700 MB 上下），只带回得了工的那两个小文件。
+art/*
+!art/万界/
+art/万界/*
+!art/万界/build.py
+!art/万界/desc.txt
+!art/万界/cover.png
+
+# ===== 不该公开的 =====
+世界观规则_v1.0.txt
+Claude outputs/
+参考-武侠江湖模拟器.html
+
+# ===== 另一条路上的试作，别让它顶掉正式版 =====
+工匠人生-试玩版.html
+试玩说明.md
+playtest/
+归档/
+
+# ===== 杂项 =====
+.DS_Store
+**/.DS_Store
+node_modules/
+test/*.png
+_临时预览_可删/
