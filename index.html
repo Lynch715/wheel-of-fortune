@@ -819,7 +819,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=11;
+const SAVE_VERSION=12;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -832,6 +832,7 @@ function newStateShell(){
     memLong:true,
     sect:null,
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0}, forged:[],
+    ties:{'东荒-西陆':50,'东荒-樱洲':50,'西陆-樱洲':50}, voidP:20, lords:{}, lordSince:null, lordPolicy:null,
     rankVacantTurns:0,
     quests:[], achievements:[],
     stats:{duelWins:0,duelLosses:0,kills:0,spares:0,escapes:0,secrets:0,talks:0,questsDone:0},
@@ -943,6 +944,20 @@ function migrate(s){
     const f=FREEDOM[s.freedom]?s.freedom:'mid';
     for(const [g] of FD_GROUPS) if(!FREEDOM[s['fd_'+g]]) s['fd_'+g]=f;
     s.v=11;
+  }
+  if(s.v<12){
+    // v2.0：万界局势。老存档一律从平常起步，压力按已轮转次数估一个
+    if(!s.ties) s.ties={'东荒-西陆':50,'东荒-樱洲':50,'西陆-樱洲':50};
+    if(s.voidP==null) s.voidP=Math.min(60,20+num(s.wheelTurns)*5);
+    if(!s.lords) s.lords={};
+    if(s.lordSince===undefined) s.lordSince=null;
+    if(s.lordPolicy===undefined) s.lordPolicy=null;
+    if(s.tideSev==null) s.tideSev=0;
+    if(s.warServed==null) s.warServed=0;
+    const keep=S; S=s;
+    try{ recalcLords(true); }catch(e){ console.warn('界主初始化失败',e); }
+    S=keep;
+    s.v=12;
   }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
@@ -1140,6 +1155,8 @@ function upkeepPerMonth(){
   const p=S.player; if(!p) return 0;
   let c=5+Math.floor(p.age/12);
   if(p.faction&&!/散人|^无$|^$/.test(p.faction)&&sectHere()) c=Math.round(c*0.55);   // 有势力管饭；人不在本界就管不着
+  if(isLordOf(jieName())) c=Math.round(c*0.7);                                       // 界主有人供养
+  if(tideOn()) c=Math.round(c*1.2);                                                  // 起了魔潮，什么都贵
   if(p.hp<30) c+=12; else if(p.hp<60) c+=4;                              // 汤药钱
   if(p['声望']>=60||p['恶名']>=60) c+=6;                                  // 名气大了排场也大
   const m=(S.difficulty==='hard'?1.5:(S.difficulty==='easy'?0.6:1))*fdm().upkeep*(foreignPenalty().cost||1);
@@ -1400,6 +1417,7 @@ function advanceTime(n){
   tickNpcs(n);
   sectTick(n);
   wheelTick();
+  worldTick(n);
   if(inAbyss()) abyssTick();
   cursedTick(n);
   S.upkeepLast=cost; S.starveMonths=starve; S.destitute=starve>0;
@@ -1411,6 +1429,223 @@ function advanceTime(n){
   return {cost,starve,months:n};
 }
 
+
+/* ================= 万界局势 =================
+   三界两两一个关系值（0-100，50 是平常），外加一个幽墟压力（0-100）。
+   闲着的时候关系慢慢坏、压力慢慢落；界门一开压力猛涨，压力够高三界才肯回暖。
+   「勉强团结」是这两个数算出来的，不是在提示词里写一句「大家要团结」。
+   放在 S 顶层而不是 S.world 里：mergeWorld() 会整个重建 S.world，放进去会被冲掉。 */
+const TIE_REALMS=['东荒','西陆','樱洲'];
+function tieKey(a,b){
+  const i=TIE_REALMS.indexOf(a), j=TIE_REALMS.indexOf(b);
+  if(i<0||j<0||i===j) return null;
+  return i<j?(a+'-'+b):(b+'-'+a);
+}
+function tieOf(a,b){ const k=tieKey(a,b); return k&&S&&S.ties?num(S.ties[k]):50; }
+function tieAdd(a,b,d){ const k=tieKey(a,b); if(k&&S&&S.ties) S.ties[k]=Math.max(0,Math.min(100,num(S.ties[k])+d)); }
+function tieAll(d){ if(!S||!S.ties) return; for(const k in S.ties) S.ties[k]=Math.max(0,Math.min(100,num(S.ties[k])+d)); }
+function tieLabel(v){ v=num(v); return v<25?'仇雠':(v<40?'交恶':(v<60?'平常':(v<80?'和睦':'同盟'))); }
+function voidP(){ return S?num(S.voidP):0; }
+function voidAdd(d){ if(S) S.voidP=Math.max(0,Math.min(100,num(S.voidP)+d)); }
+function voidLabel(v){ v=num(v); return v<25?'低':(v<50?'有些动静':(v<70?'高':'极高')); }
+// 关系低于这个数，界门一开两边就打起来
+const WAR_TIE=40;
+function warPairs(){
+  const out=[];
+  if(!S||!S.ties) return out;
+  for(const k in S.ties) if(num(S.ties[k])<WAR_TIE) out.push(k.split('-'));
+  return out;
+}
+function atWar(realm){ return warPairs().some(p=>p[0]===realm||p[1]===realm); }
+function warFoe(realm){ const p=warPairs().find(x=>x[0]===realm||x[1]===realm); return p?(p[0]===realm?p[1]:p[0]):null; }
+// 按月推：闲着就慢慢坏，开着门就看压力够不够高
+function worldTick(months){
+  if(!S||!S.ties) return;
+  months=Math.max(0,num(months)); if(!months) return;
+  if(S.gateOpen){
+    if(voidP()>=60) tieAll(8*months);      // 同仇敌忾
+    else tieAll(-5*months);                // 趁乱削邻居
+  }else{
+    voidAdd(-1*months);
+    tieAll(-0.5*months);
+  }
+}
+
+/* 局势写进提示词。放【当前时间】之后——它每回合都在变，进前半截会把缓存打废 */
+function situBlock(){
+  if(!S||!S.ties||!S.player) return '';
+  const lords=TIE_REALMS.map(R=>{
+    const l=(S.lords||{})[R], sg=JIE[R].sigil;
+    if(!l) return `${sg}${R}：不详`;
+    if(l.rumor) return `${sg}${R}：${l.name}（只是传闻，主角没见过，也不知底细）`;
+    if(l.isPlayer) return `${sg}${R}：主角本人`;
+    const nn=findNpc(l.name);
+    return `${sg}${R}：${l.name}${nn?`（${nn.relation||'相识'}，好感${num(nn['好感度'])}）`:'（素未谋面）'}`;
+  }).join('｜');
+  const ties=Object.keys(S.ties).map(k=>`${k.replace('-','—')}${Math.round(num(S.ties[k]))}（${tieLabel(S.ties[k])}）`).join('、');
+  let t=`【万界局势】三界界主：${lords}\n幽墟压力${Math.round(voidP())}（${voidLabel(voidP())}）；界势：${ties}`;
+  const wars=warPairs().map(p=>p.join('与')).join('、');
+  if(wars) t+=`\n${S.gateOpen?'眼下正在开打':'界门一开就要打'}：${wars}`;
+  if(tideOn()) t+=`\n${jieName()}正在${voidWord()}之中（${num(S.tideSev)>=3?'极重':(num(S.tideSev)>=2?'来势不轻':'尚能支撑')}）`;
+  const mine=myLordRealm();
+  if(mine) t+=`\n主角是${mine}的界主，坐了${Math.max(0,num(S.months)-num(S.lordSince||S.months))}个月——本界的事都记在他头上，他说话有人听，恨他的人也多。`;
+  t+='\n这几个数是引擎记的账：写世事、写风闻、写旁人待主角的态度都要跟它对上。关系差的两界，人到了对面就不受待见；压力高的时候，各界都在谈幽墟。';
+  return t;
+}
+
+/* ================= 魔潮与攻伐（规范 v2.0 第 3 节）=================
+   界门一开，那两个月里三件事一起来：幽墟能下去、幽墟的东西反打上来、三界之间也趁乱开战。
+   这一条让「不下幽墟的人」也感受得到幽墟——以前幽墟对不去的人等于不存在。 */
+function tideSev(){ const v=voidP(); return v>=80?3:(v>=60?2:1); }
+function tideOn(){ return !!(S&&S.gateOpen&&S.tideSev); }
+function voidTide(){
+  if(!S||!S.player) return;
+  const sev=tideSev(), w=voidWord(), here=jieName();
+  S.tideSev=sev;
+  voidAdd(5); tieAll(3);                          // 打进来一次，压力更大，三界也更肯抱团
+  const guard=(myLordRealm()===here&&S.lordPolicy==='守幽墟')?0.5:1;
+  news(`界门大开，幽墟那边压了过来——${here}起了${w}${sev>=3?'，据说是几代人里最重的一场':(sev>=2?'，来势不轻':'')}`);
+  ledger(`第${S.wheelTurns}次轮转：${here}起${w}`);
+  const risk=0.06*sev*guard;
+  for(const nn of (S.npcs||[])){
+    if(!nn||!nn.alive||nn.realm!==here) continue;
+    const r=Math.random();
+    if(r<risk){ nn.alive=false; ledger(`${nn.name}死于这场${w}`); news(`${nn.name}没能挺过这场${w}`); }
+    else if(r<risk*2.5){ news(`${nn.name}在${w}里受了伤`); }
+  }
+}
+function tideEvent(){
+  if(!tideOn()) return null;
+  const w=voidWord(), sev=num(S.tideSev);
+  return `${jieName()}正在${w}之中（${sev>=3?'极重':(sev>=2?'来势不轻':'尚能支撑')}）：`
+    +`本回合的剧情必须落在这上头——守城、驰援、避风头、发死人财，写哪一样都行，但不许当它没发生。`;
+}
+// 关系太差的两界，界门一开就打
+function warTick(){
+  if(!S) return;
+  const pairs=warPairs(); if(!pairs.length) return;
+  for(const p of pairs){
+    if(myLordRealm()&&S.lordPolicy==='守幽墟'&&p.indexOf(myLordRealm())>=0) continue;   // 本界按兵不动
+    ledger(`第${S.wheelTurns}次轮转：${p[0]}与${p[1]}开战`);
+    news(`界门一开，${p[0]}与${p[1]}就打起来了`);
+  }
+  const rk=(S.world&&S.world.ranking)||[];
+  const inWar=rk.filter(r=>r&&r.alive!==false&&r.realm&&atWar(r.realm));
+  if(inWar.length&&Math.random()<0.5){
+    const dead=pick(inWar); dead.alive=false;
+    ledger(`${dead.name}战死`); news(`万界榜上的${dead.name}死在了这一仗里`);
+  }
+}
+// 打起仗来，外人尤其难做
+function warDC(){ return (S&&S.gateOpen&&atWar(jieName())&&S.homeRealm&&S.realm!==S.homeRealm)?5:0; }
+function extraDC(){ return abyssDC()+warDC(); }
+// 本界在打仗，师门会来叫人
+function callUp(){ return !!(S&&S.gateOpen&&atWar(jieName())&&S.sect&&sectHere()&&!S.warServed); }
+function answerCallUp(yes){
+  if(!S||!callUp()) return;
+  S.warServed=1;
+  const p=S.player, foe=warFoe(jieName())||'邻界';
+  if(!yes){
+    S.sect.contrib=Math.max(0,num(S.sect.contrib)-30);
+    ledger(`${S.sect.name}征召上阵，你推了`); news(`你推掉了${S.sect.name}的征召，门里有人记着这笔`);
+  }else{
+    const r=rollCheck('修为',65);
+    if(r.success){
+      S.sect.contrib=num(S.sect.contrib)+40;
+      p['声望']=clamp(num(p['声望'])+8);
+      p.money=num(p.money)+rnd(80,260);
+      ledger(`随${S.sect.name}出阵，与${foe}打了一仗，活着回来了`);
+      news(`你随${S.sect.name}上了阵，这一仗打赢了，门里记你一功`);
+    }else{
+      p.hp=clamp(p.hp-rnd(22,38),0,100);
+      S.sect.contrib=num(S.sect.contrib)+15;
+      sufferInjury(0.5,`与${foe}那一仗`,true);
+      ledger(`随${S.sect.name}出阵，与${foe}那一仗吃了大亏`);
+      news(`那一仗打得惨，你是被人抬下来的`);
+    }
+  }
+  renderPanel(); renderWorld(); saveGame();
+}
+
+/* ================= 界主 =================
+   界主是政治不是武力：势力总权 ×0.5 + 声望 ×0.3 + 修为 ×0.2，每次轮转重算。
+   只按修为选，这套东西就只是给万界榜换了个名字。
+   轮枢不设（谁也当不了，这正好解释它为什么乱），幽墟不设（那是对面的地盘）。 */
+function factionPowerOf(name, realm){
+  let p=0;
+  for(const f of ((S.world&&S.world.factions)||[]))
+    if(f&&f.leader&&f.leader===name&&(!realm||f.realm===realm)) p+=num(f.power);
+  return Math.min(100,p);
+}
+function lordCalc(power, fame, wu, foreign){
+  const raw=num(power)*0.5+num(fame)*0.3+wuNorm(num(wu))*0.2;
+  return Math.round(raw*(foreign?0.6:1)*10)/10;     // 异界之身本地人不服，打六折
+}
+// NPC 没有「声望」这一栏：当家的按势力权势算，不当家的按修为折一半
+function npcFame(o){ const p=factionPowerOf(o.name); return p?Math.min(100,p+10):Math.round(num(o['修为'])*0.5); }
+// 玩家的界主分算在哪一界：人在三界之一就算那一界；人在轮枢或幽墟，算出生界（只是出门了）
+function playerLordRealm(){
+  const here=jieName();
+  return TIE_REALMS.indexOf(here)>=0?here:((S&&S.homeRealm)||'东荒');
+}
+function playerFactionPower(){
+  if(!S||!S.sect) return 0;
+  if(sectLevel(num(S.sect.contrib))<SECT_STEPS.length-1) return 0;   // 贡献到顶才算掌了这个势力
+  const f=(typeof factionOf==='function')?factionOf(S.sect.name):null;
+  return f?num(f.power):0;
+}
+function playerLordScore(){
+  if(!S||!S.player) return 0;
+  const foreign=playerLordRealm()!==S.homeRealm;
+  return lordCalc(playerFactionPower(), num(S.player['声望']), attrVal(S.player,'修为'), foreign);
+}
+// 一界里够格争的人：势力当家的、榜上的、认识的，加上玩家自己
+function lordPool(R){
+  const seen=new Set(), out=[];
+  const push=(name,power,fame,wu,foreign,isPlayer)=>{
+    if(!name||seen.has(name)) return; seen.add(name);
+    out.push({name, score:lordCalc(power,fame,wu,foreign), isPlayer:!!isPlayer});
+  };
+  if(playerLordRealm()===R) push(S.player.name, playerFactionPower(), num(S.player['声望']), attrVal(S.player,'修为'), R!==S.homeRealm, true);
+  for(const f of ((S.world&&S.world.factions)||[])){
+    if(!f||f.realm!==R||!f.leader) continue;
+    const nn=findNpc(f.leader), rk=((S.world&&S.world.ranking)||[]).find(r=>r.name===f.leader);
+    const wu=nn?num(nn['修为']):(rk?num(rk['修为']):60);
+    push(f.leader, factionPowerOf(f.leader,R), npcFame({name:f.leader,'修为':wu}), wu, false);
+  }
+  for(const r of ((S.world&&S.world.ranking)||[])){
+    if(!r||r.realm!==R||r.alive===false) continue;
+    push(r.name, factionPowerOf(r.name,R), npcFame(r), num(r['修为']), false);
+  }
+  for(const nn of (S.npcs||[])){
+    if(!nn||!nn.alive||nn.realm!==R) continue;
+    push(nn.name, factionPowerOf(nn.name,R), npcFame(nn), num(nn['修为']), false);
+  }
+  return out;
+}
+function isLordOf(R){ const l=S&&S.lords&&S.lords[R]; return !!(l&&l.isPlayer); }
+function isLord(){ return !!(S&&S.lords&&TIE_REALMS.some(R=>S.lords[R]&&S.lords[R].isPlayer)); }
+function myLordRealm(){ if(!S||!S.lords) return null; return TIE_REALMS.find(R=>S.lords[R]&&S.lords[R].isPlayer)||null; }
+// 每次轮转重算一遍。没去过的界只有「传闻」：名字知道，数值不知道
+function recalcLords(quiet){
+  if(!S||!S.player) return;
+  S.lords=S.lords||{};
+  for(const R of TIE_REALMS){
+    const known=(S.forged||[]).indexOf(R)>=0;
+    if(!known){
+      if(!S.lords[R]) S.lords[R]={name:makeName(R), rumor:true};
+      continue;
+    }
+    const pool=lordPool(R).sort((a,b)=>b.score-a.score);
+    if(!pool.length) continue;
+    const top=pool[0], was=S.lords[R]||null;
+    S.lords[R]={name:top.name, score:top.score, isPlayer:top.isPlayer, rumor:false, second:pool[1]?pool[1].score:0};
+    if(quiet||!was||was.name===top.name) continue;
+    if(top.isPlayer){ S.lordSince=num(S.months); S.lordPolicy=null; ledger(`你坐上了${R}界主之位`); news(`${R}换了界主——是你`); }
+    else if(was.isPlayer){ S.lordSince=null; S.lordPolicy=null; ledger(`丢了${R}界主之位，${top.name}接了过去`); news(`${top.name}取代你成了${R}的界主`); }
+    else if(!was.rumor){ ledger(`${R}换了界主：${was.name}下、${top.name}上`); news(`${R}换了界主，如今是${top.name}`); }
+  }
+}
 
 /* ================= 轮转与界门 =================
    每 18-30 个月轮转一格，界门开两个月；提前三个月起风声。
@@ -1426,13 +1661,20 @@ function wheelTick(){
       S.wheelNext=S.months+wheelPeriod();
       news('界门已合，下一次轮转还早');
       ledger(`界门合上（第${S.wheelTurns}次轮转）`);
+      S.lordPolicy=null; S.tideSev=0; S.warServed=0;
+      recalcLords();
     }
     return;
   }
   if(S.months>=num(S.wheelNext)){
     S.gateOpen=true; S.gateCloseAt=S.months+2; S.wheelTurns=num(S.wheelTurns)+1; S.gateWarned=false;
+    voidAdd(15);                                  // 门一开，那边的压力就顶上来了
     news('命运之轮转了一格，界门大开——这两个月里，五界之间走得通');
     ledger(`第${S.wheelTurns}次轮转，界门开`);
+    S.warServed=0; S.lordPolicy=null;
+    recalcLords();
+    voidTide();
+    warTick();
     // 界门一开，异界的人和货就过来了
     if(Math.random()<0.75){
       const from=pick(JIE_ORDER.filter(k=>k!==jieName()&&JIE[k].reachable&&k!=='轮枢'));
@@ -1792,7 +2034,7 @@ function rollCheck(attr,need){
   let val=attrVal(p,attr);
   if(S.destitute) val-=Math.round(5*fdm().starve);   // 饥寒交迫，做什么都差一口气
   val+=fdm().check;                                   // 自由度越高，主角越吃得开
-  const roll=d20(), dc=Math.max(20,num(need)+diff().dc+abyssDC());
+  const roll=d20(), dc=Math.max(20,num(need)+diff().dc+extraDC());
   const total=val+rollMod(roll);           // 属性定基准，骰子给 ±40 的浮动
   const crit=roll===20?'大成功':(roll===1?'大失败':'');
   const success=roll===20?true:(roll===1?false:total>=dc);
@@ -2033,7 +2275,7 @@ function vSetOut(v,n){
 function tickVendettas(months){
   if(!S.vendettas||!S.vendettas.length) return;
   const warnBefore=(S.vendettas||[]).map(v=>({n:v.name,e:v.eta}));
-  const mul=(S.difficulty==='hard'?1.4:(S.difficulty==='easy'?0.6:1))*fdm().vendetta;
+  const mul=(S.difficulty==='hard'?1.4:(S.difficulty==='easy'?0.6:1))*fdm().vendetta*(isLord()?2:1);   // 坐上那个位子，恨你的人也翻倍
   const here=(S.scene&&S.scene.location)||'';
   for(const v of S.vendettas){
     const n=findNpc(v.name);
@@ -2901,6 +3143,7 @@ function stateBlocks(){
   return `【当前时间】${S.date}（第${S.turn}回合）
 【当前所在】${jieName()}${(S.homeRealm&&S.realm!==S.homeRealm)?`（主角生在${S.homeRealm}，如今人在异界）`:''}
 【界门】${S.gateOpen?`此刻开着，还有 ${Math.max(0,num(S.gateCloseAt)-num(S.months))} 个月合上——这几个月五界之间走得通，异界来客、异界的货都会出现`:`未开，约 ${gateLeft()} 个月后轮转`}
+${situBlock()}
 【当前场景】${S.scene?`主角现在${S.scene.location||'未知地点'}。未了结的事：${asArr(S.scene.unresolved).join('；')||'无'}`:'见最近剧情'}
 【主角姓名】${p.name}${p.biaozi?`（字${p.biaozi}）`:''}——${nameRule(p)}称呼口径：${addrLine(p)}。绝不可换成别的姓或别的名字。
 【主角画像】${npcPortrait(p)||'（未定）'}——后文写主角的相貌衣着须与这幅画像相符
@@ -2933,10 +3176,10 @@ ${(S.ledger||[]).slice(-M.ledger).join('\n')||'（尚无）'}`;
    公式与 rollCheck 完全一致——同一个难度阶梯、同一个气运加成、同一个难度修正、同一条 20/1 规则
    （规范 v1.1 第 4.3 条，甲案）。 */
 function judgeHowTo(roll){
-  const mod=rollMod(roll), dc=diff().dc+abyssDC(), ch=fdm().check;
+  const mod=rollMod(roll), dc=diff().dc+extraDC(), ch=fdm().check;
   return `【判定怎么算】（自由行动、面谈、按钮，三处同一套）
   · 难度 need 由你按情境定：40 容易／55 一般／70 困难／85 极难／100 近乎不可能。
-  · 门槛 = need ${dc>=0?'＋':'－'}${Math.abs(dc)}（本局「${diff().label}」的难度修正${inAbyss()?'，另加幽墟的 +10':''}），最低不下 20。
+  · 门槛 = need ${dc>=0?'＋':'－'}${Math.abs(dc)}（本局「${diff().label}」的难度修正${inAbyss()?'，另加幽墟的 +10':''}${warDC()?'，另加战时外人的 +5':''}），最低不下 20。
   · 总值 = 主角相关属性 ＋ 骰面修正【${mod>=0?'+':''}${mod}】 ＋ 气运加成 ${ch}。
   · 总值 ≥ 门槛算成，低于算败。
   · 但**掷 20 必成、掷 1 必败**，不看总值——本次的骰是 ${roll}${roll===20?'，必成':(roll===1?'，必败':'')}。`;
@@ -3479,13 +3722,14 @@ function mergeWorld(w, realmKey){
     fallen: old.fallen||[], vacant: old.vacant||0
   };
   (S.forged=S.forged||[]).push(w.__realm);
+  recalcLords(true);                        // 头一回到这一界，那位「传闻中的界主」这下落实了
 }
 function dedupeRank(list){
   const seen=new Set(), out=[];
   for(const r of list){ if(seen.has(r.name)) continue; seen.add(r.name); out.push(r); }
   return out;
 }
-function applyWorld(w){ if(!w) return; S.world=worldShape(w); S.forged=[w.__realm||jieName()]; }
+function applyWorld(w){ if(!w) return; S.world=worldShape(w); S.forged=[w.__realm||jieName()]; recalcLords(true); }
 function worldShape(w){
   return {
     factions:(w.factions||[]).filter(f=>f&&f.name).map(f=>({name:f.name,type:plain(f.type)||'',realm:w.__realm||jieName(),alignment:f.alignment||'中立',power:clamp(num(f.power)),leader:f.leader||'',desc:f.desc||''})),
@@ -4137,6 +4381,9 @@ function showWinChoice(){
   };
   $('dKill').onclick=()=>{
     duel.opp.alive=false; S.stats.kills++; ledger(`亲手杀了${duel.opp.name}`);
+    if(inAbyss()&&/噬渊|蚀骨|幻面|枯骨庭/.test(String(duel.opp.faction||''))){
+      voidAdd(-8); news(`${duel.opp.name}一死，这一片的动静小了些`);
+    }
     const r=(S.world.ranking||[]).find(x=>x.name===duel.opp.name); if(r) r.alive=false;
     S.player['恶名']=clamp(S.player['恶名']+(duel.opp.alignment==='邪道'?4:15));
     // 死者的同门亲友会来寻仇
@@ -4845,12 +5092,69 @@ function renderGate(){
     ? `界门<b>开着</b>，还有 ${Math.max(0,num(S.gateCloseAt)-num(S.months))} 个月合上`
     : `界门未开，约 <b>${gateLeft()}</b> 个月后轮转${gateLeft()<=3?'（风声已经起了）':''}`);
   lines.push(`已轮转 ${num(S.wheelTurns)} 次`);
+  // 三界界主
+  const lord=TIE_REALMS.map(R=>{
+    const l=(S.lords||{})[R];
+    if(!l) return `${JIE[R].sigil}${R}：不详`;
+    if(l.rumor) return `${JIE[R].sigil}${R}：${esc(l.name)}<span style="color:var(--ink-faint)">（传闻）</span>`;
+    if(l.isPlayer) return `${JIE[R].sigil}${R}：<b style="color:var(--accent)">你</b>`;
+    return `${JIE[R].sigil}${R}：${esc(l.name)}`;
+  }).join('<br>　　　');
+  const ties=Object.keys(S.ties||{}).map(k=>`${k.replace('-','—')} <b>${Math.round(num(S.ties[k]))}</b>（${tieLabel(S.ties[k])}）`).join('<br>　　　');
+  const wars=warPairs().map(p=>p.join('—')).join('、');
+  lines.push(`<span style="color:var(--ink-faint)">──────</span>`);
+  lines.push(`界主　${lord}`);
+  lines.push(`幽墟压力 <b>${Math.round(voidP())}</b>（${voidLabel(voidP())}）`);
+  lines.push(`界势　${ties}`);
+  if(wars) lines.push(`<span style="color:var(--accent)">开门时会打起来：${esc(wars)}</span>`);
+  const mine=myLordRealm();
+  if(mine){
+    const l=S.lords[mine];
+    lines.push(`你是<b style="color:var(--accent)">${mine}界主</b>，分 ${l.score}（第二名 ${l.second}）；坐了 ${Math.max(0,num(S.months)-num(S.lordSince||S.months))} 个月`);
+  }else{
+    const R=playerLordRealm(), l=(S.lords||{})[R];
+    if(l&&!l.rumor) lines.push(`你在${R}的界主分 ${playerLordScore()}${R!==S.homeRealm?'（异界之身，已打六折）':''}，当今那位 ${l.score}`);
+  }
+  // 界主在开门那两个月要定本界的方针
+  let policy='';
+  if(mine&&S.gateOpen){
+    const P=[['守幽墟','魔潮伤害减半，但这两个月不动邻居'],['打邻居','趁乱削人，关系暴跌'],['两不相帮','都不占，也都不亏']];
+    policy=`<div class="gaterow" style="flex-wrap:wrap">`+P.map(x=>
+      `<button class="mbtn${S.lordPolicy===x[0]?' primary':''}" data-p="${x[0]}" style="flex:1;min-width:90px;font-size:13px;letter-spacing:1px" title="${x[1]}">${x[0]}</button>`).join('')+`</div>
+      <div class="note">身为${mine}界主，这两个月要定个方针：${S.lordPolicy?esc(P.find(x=>x[0]===S.lordPolicy)[1]):'还没定'}</div>`;
+  }
+  let callup='';
+  if(callUp()){
+    callup=`<div class="gaterow"><button class="mbtn primary" id="btnWarYes" style="flex:1">应征上阵</button><button class="mbtn" id="btnWarNo" style="flex:1">推了</button></div>`
+      +`<div class="note">${esc(S.sect.name)}正在征人去打${esc(warFoe(jieName())||'邻界')}。去了要拿命拼，但门里记你一功；推了掉贡献。</div>`;
+  }
   const seek=(jieName()==='轮枢'&&!abyssPass())
     ? `<div class="gaterow"><button class="mbtn" id="btnSeekPass" style="width:100%">☠ 往命运神殿求引荐（下幽墟用，${abyssPassCost()} 两）</button></div>` : '';
   box.innerHTML=`<div class="gatebox">${lines.join('<br>')}</div>
-    <div class="gaterow"><button class="mbtn" id="btnCross" style="width:100%">◎ 过界 · 看规则</button></div>${seek}`;
+    <div class="gaterow"><button class="mbtn" id="btnCross" style="width:100%">◎ 过界 · 看规则</button></div>${seek}${callup}${policy}`;
   const b=$('btnCross'); if(b) b.onclick=openCross;
   const b2=$('btnSeekPass'); if(b2) b2.onclick=seekAbyssPass;
+  box.querySelectorAll('button[data-p]').forEach(el=>el.onclick=()=>setLordPolicy(el.dataset.p));
+  const wy=$('btnWarYes'); if(wy) wy.onclick=()=>answerCallUp(true);
+  const wn=$('btnWarNo');  if(wn) wn.onclick=()=>answerCallUp(false);
+}
+function setLordPolicy(p){
+  const mine=myLordRealm();
+  if(!S||!mine||!S.gateOpen) return;
+  if(S.lordPolicy===p) return;
+  S.lordPolicy=p;
+  if(p==='打邻居'){
+    const foe=TIE_REALMS.filter(R=>R!==mine).sort((a,b)=>tieOf(mine,a)-tieOf(mine,b))[0];
+    tieAdd(mine,foe,-15);
+    ledger(`身为${mine}界主，趁界门大开对${foe}下了手`);
+    news(`${mine}趁乱动了${foe}，两边的梁子结得更深了`);
+  }else if(p==='守幽墟'){
+    ledger(`身为${mine}界主，把兵都调去守幽墟那一头`);
+    news(`${mine}这两个月按兵不动，全力防着幽墟那边`);
+  }else{
+    ledger(`身为${mine}界主，这一轮两不相帮`);
+  }
+  renderWorld(); saveGame();
 }
 function openCross(){
   if(!S||S.over) return;
@@ -5370,7 +5674,7 @@ function guessAttr(t){
   return null;
 }
 function makeJudge(opt,action){
-  const judge={fate:fateRoll(),check:null,worldEvent:pickWorldEvent(),duel:false,months:optMonths(opt)};
+  const judge={fate:fateRoll(),check:null,worldEvent:tideEvent()||pickWorldEvent(),duel:false,months:optMonths(opt)};
   const stuck=stuckLevel();
   if(stuck>=0.5){ judge.stuck=Math.round(stuck*100); judge.nudge=pickNudge(action||(opt&&opt.text)||''); }
   if(judge.fate<=3&&fdm().doom>0) judge.doom=makeDoom();
