@@ -179,6 +179,13 @@ body{
 .gatebox{font-size:13px;line-height:1.9}
 .gatebox b{color:var(--accent)}
 .gaterow{display:flex;align-items:center;gap:8px;margin-top:6px}
+.ochk{display:flex;gap:9px;align-items:flex-start;padding:7px 2px;border-bottom:1px dashed var(--paper-edge);font-size:13.5px}
+.ochk:last-of-type{border-bottom:none}
+.ochk .obox{color:var(--ink-faint);font-size:15px;line-height:1.35;flex:0 0 auto}
+.ochk.on .obox{color:var(--green)}
+.ochk .otxt{flex:1;min-width:0}
+.ochk .otxt small{display:block;color:var(--ink-soft);font-size:12px;margin-top:2px;line-height:1.6}
+.ochk.on .otxt b{color:var(--green)}
 .fdrow{display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;margin-bottom:6px}
 .fdrow label{font-size:13px;color:var(--ink);font-weight:600;letter-spacing:1px}
 .fdrow label small{display:block;font-size:11px;color:var(--ink-soft);font-weight:400;letter-spacing:0}
@@ -543,6 +550,7 @@ body{
     <div class="tabpane" id="tab-world">
       <div class="card"><h3>❈ 界门 <small>命运之轮转到哪儿了</small></h3><div id="wGate"></div></div>
       <div class="card"><h3>❈ 宿命 <small>你此生要追的事</small></h3><div id="wQuests"></div></div>
+      <div class="card" id="outerCard" style="display:none"><h3>☠ 轮外之物 <small id="outerSub"></small></h3><div id="outerList"></div></div>
       <div class="card"><h3>❈ 万界榜 <small>当世高手</small></h3><div id="wRanking"></div></div>
       <div class="card"><h3>❈ 势力格局</h3><div id="wFactions"></div></div>
       <div class="card"><h3>❈ 仇家 <small>盯上你的人</small></h3><div id="wVendetta"></div></div>
@@ -816,7 +824,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=12;
+const SAVE_VERSION=13;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -830,6 +838,7 @@ function newStateShell(){
     sect:null,
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0}, forged:[],
     ties:{'东荒-西陆':50,'东荒-樱洲':50,'西陆-樱洲':50}, voidP:20, lords:{}, lordSince:null, lordPolicy:null,
+    abyssMonths:0, outerHeads:[], outerBeaten:false, outerCool:0,
     rankVacantTurns:0,
     quests:[], achievements:[],
     stats:{duelWins:0,duelLosses:0,kills:0,spares:0,escapes:0,secrets:0,talks:0,questsDone:0},
@@ -955,6 +964,14 @@ function migrate(s){
     try{ recalcLords(true); }catch(e){ console.warn('界主初始化失败',e); }
     S=keep;
     s.v=12;
+  }
+  if(s.v<13){
+    // v2.0 第二批：轮外之物
+    if(s.abyssMonths==null) s.abyssMonths=0;
+    if(!Array.isArray(s.outerHeads)) s.outerHeads=[];
+    if(s.outerBeaten==null) s.outerBeaten=false;
+    if(s.outerCool==null) s.outerCool=0;
+    s.v=13;
   }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
@@ -1415,7 +1432,7 @@ function advanceTime(n){
   sectTick(n);
   wheelTick();
   worldTick(n);
-  if(inAbyss()) abyssTick();
+  if(inAbyss()){ S.abyssMonths=num(S.abyssMonths)+n; abyssTick(); }
   cursedTick(n);
   S.upkeepLast=cost; S.starveMonths=starve; S.destitute=starve>0;
   if(S.destitute){ p.hp=Math.max(1,p.hp-Math.round(4*starve*fdm().starve)); }
@@ -1503,6 +1520,8 @@ function voidTide(){
   const guard=(myLordRealm()===here&&S.lordPolicy==='守幽墟')?0.5:1;
   news(`界门大开，幽墟那边压了过来——${here}起了${w}${sev>=3?'，据说是几代人里最重的一场':(sev>=2?'，来势不轻':'')}`);
   ledger(`第${S.wheelTurns}次轮转：${here}起${w}`);
+  if(voidP()>=45) news(`这一场${w}之后，老人们又提起了${outerName()}——说这些东西是替谁开路的`);
+  if(voidP()>=60) news(`命运神殿这回不绕弯子了：${outerName()}要啃的是轮本身，轮一断，就再没有下一世`);
   const risk=0.06*sev*guard;
   for(const nn of (S.npcs||[])){
     if(!nn||!nn.alive||nn.realm!==here) continue;
@@ -1562,6 +1581,59 @@ function answerCallUp(yes){
     }
   }
   renderPanel(); renderWorld(); saveGame();
+}
+
+/* ================= 轮外之物（规范 v2.0 第 4 节）=================
+   不是一场比武，是一串条件。最难的那一条是三界界主联署——
+   想杀它，先得让三界肯一起出兵。 */
+const OUTER_MONTHS=24, OUTER_HEADS=2, OUTER_RELICS=3, OUTER_VOID=80, OUTER_COOL=24;
+const OUTER_CLANS=['噬渊','蚀骨','幻面'];
+function outerName(realm){ const j=JIE[realm||jieName()]||jie(); return j.outerName||'轮外之物'; }
+function cursedHeld(){
+  let c=0; const p=S&&S.player; if(!p||!p.items) return 0;
+  for(const cat in p.items) for(const it of (p.items[cat]||[])) if(it&&it.cursed) c++;
+  return c;
+}
+// 联署：界主本人就是你，那就自己签；否则交情与名望两样都得够
+function lordSigned(R){
+  const l=(S&&S.lords||{})[R];
+  if(!l) return {ok:false, why:`${R}：还不知道那位是谁`};
+  if(l.rumor) return {ok:false, why:`${R}·${l.name}：只是传闻，得亲自去见一面`};
+  if(l.isPlayer) return {ok:true, why:`${R}：界主就是你，这一签不用求人`};
+  const nn=findNpc(l.name), fav=nn?num(nn['好感度']):null, fame=num(S.player['声望']);
+  const okFav=fav!=null&&fav>=70, okFame=fame>=60;
+  const t=[okFav?'交情够了':`交情不够（${fav==null?'素未谋面':fav}／70）`, okFame?'名望够了':`名望不够（${fame}／60）`];
+  return {ok:okFav&&okFame, why:`${R}·${l.name}：${t.join('，')}`};
+}
+function outerChain(){
+  const heads=(S&&S.outerHeads)||[];
+  const signs=TIE_REALMS.map(R=>lordSigned(R));
+  return [
+    {ok:num(S.abyssMonths)>=OUTER_MONTHS, t:`在幽墟熬满 ${OUTER_MONTHS} 个月`, now:`${num(S.abyssMonths)}／${OUTER_MONTHS}`},
+    {ok:heads.length>=OUTER_HEADS, t:`斩掉魔族两支的头目`, now:heads.length?heads.join('、'):'一支未动'},
+    {ok:cursedHeld()>=OUTER_RELICS, t:`身上带着三件幽墟器物`, now:`${cursedHeld()}／${OUTER_RELICS}`},
+    {ok:voidP()>=OUTER_VOID, t:`幽墟压力涨到 ${OUTER_VOID}`, now:`${Math.round(voidP())}／${OUTER_VOID}`},
+    {ok:signs.every(x=>x.ok), t:`三界界主联署`, now:signs.map(x=>x.why).join('｜')}
+  ];
+}
+function hasOuterQuest(){ return (S&&S.quests||[]).some(q=>q&&q.kind==='outer'); }
+function outerCooling(){ return num(S&&S.outerCool)>num(S&&S.months); }
+function outerReady(){
+  if(!S||!S.player||S.outerBeaten||outerCooling()||!hasOuterQuest()) return false;
+  return outerChain().every(x=>x.ok);
+}
+function grantOuterQuest(){
+  if(!S||!S.player||S.outerBeaten||hasOuterQuest()) return;
+  if((S.quests||[]).filter(q=>q.status==='进行中').length>=5) return;
+  S.quests.push({title:'轮外之物', kind:'outer', progress:0, status:'进行中',
+    desc:`幽墟底下那股东西不是本地生的。${homeName()}管它叫${outerName(S.homeRealm)}，别的界另有说法，说的都是同一个。它啃的是轮本身——轮断了，五界就再没人投胎。`});
+  ledger(`背上了一桩天大的宿命：${outerName()}`);
+  news(`从幽墟回来之后，你总在想那个声音的来处——老辈人管它叫${outerName()}`);
+}
+// 顺着五条件推进度条，好让宿命卡上看得出走到哪儿了
+function outerProgress(){
+  const c=outerChain();
+  return Math.round(c.filter(x=>x.ok).length/c.length*100);
 }
 
 /* ================= 界主 =================
@@ -1775,7 +1847,7 @@ async function crossRealm(k){
   const from=jieName();
   S.realm=k; S.realmSince=S.months; S.foreignFrom=(k===S.homeRealm?null:S.months);
   (S.realmLog=S.realmLog||[]).push({realm:k,turn:S.turn,months:S.months});
-  if(k==='幽墟'){ S.abyssPaid=cost; S.abyssSince=S.months; S.abyssRolls=0; news('天底是一片不动的暗红，从这一刻起就没再变过'); }
+  if(k==='幽墟'){ S.abyssPaid=cost; S.abyssSince=S.months; S.abyssRolls=0; news('天底是一片不动的暗红，从这一刻起就没再变过'); grantOuterQuest(); }
   if(k!==S.homeRealm) grantAbyssQuest();
   if(from==='幽墟'){ S.abyssSince=null; S.abyssRolls=0; ledger('从幽墟上来了'); }
   ledger(`从${from}过界到${k}（${how}，花了${cost}两）`);
@@ -2108,11 +2180,15 @@ function pickInjury(allowCripple){
 }
 // severity 0-1：越接近1越可能落下残疾
 function sufferInjury(severity, cause, allowCripple){
-  const p=S.player;
   let f=fdm().injury;
   if(inAbyss()) f=Math.max(f,0.5)*1.5;     // 幽墟：随心所欲档也会重伤（但仍不死，storyDeath 不动）
   severity*=f;
   if(severity<=0||Math.random()>severity) return null;
+  return forceInjury(cause, allowCripple);
+}
+// 不看自由度、不掷概率，非落不可的那一条（如讨伐轮外之物败北）
+function forceInjury(cause, allowCripple){
+  const p=S.player; if(!p) return null;
   const inj=pickInjury(!!allowCripple);
   const text=inj.apply(p);
   rebuildStatus();
@@ -2514,7 +2590,7 @@ const JIE={
   big:['被打得口喷鲜血','整个人横飞出去','护体灵光应声而散','眼前一黑几乎栽倒','法宝险些脱手'],
   miss:['一招落空','被轻轻荡开','被识破了虚招','被对方侧身避过','打在空处'],
   oppArt:['一记快剑','连环三击','裂石掌','鹰爪功','旋风腿'],
-  one:'仙佛妖魔之界，灵气修成法力',
+  one:'仙佛妖魔之界，灵气修成法力', outerName:'噬轮者', outerAlt:'大劫之主',
   flavor:'笔法像封神西游揉上修真小说：天上有仙班，地下有幽冥，山里有妖王，人间有朝廷',
   layout:'天庭管仙籍，地府管生死，灵山管佛门，人间有朝廷；道统分玄门（讲根脚、收徒挑人）与截门（有教无类，妖也收），两家是世仇；万妖山是妖族的窝。',
   power:'灵气。吸纳天地灵气，炼化为法力。',
@@ -2559,7 +2635,7 @@ const JIE={
  '西陆':{
   name:'西陆', sigil:'✠', tint:'#3a5ea8', playable:true, open:true, reachable:true,
   surname:false, era:'王国历', months:['初春月','花月','麦月','炎月','狮月','收月','酿月','霜月','雾月','冻月','雪月','待春月'],
-  one:'王国与教廷之界，魔力与斗气',
+  one:'王国与教廷之界，魔力与斗气', outerName:'深渊之外者', outerAlt:'无名之主',
   flavor:'笔法像西幻小说：王国、教廷、骑士团、魔法塔，龙与精灵各有地盘',
   layout:'几个王国互相攻伐，教廷压在王国头上；骑士团效忠王室或教廷；魔法塔发魔法师的执照，没执照施法是重罪；龙、精灵、矮人、兽人、亡灵各有地盘。',
   power:'两条路，一个人只能主修一条。魔力走魔法塔的路子，斗气走武者的路子。',
@@ -2610,7 +2686,7 @@ const JIE={
  '樱洲':{
   name:'樱洲', sigil:'⛩', tint:'#c86b8a', playable:true, open:true, reachable:true,
   surname:true, era:'年号', months:['睦月','如月','弥生','卯月','皐月','水无月','文月','叶月','长月','神无月','霜月','师走'],
-  one:'幕府与妖怪之界，咒力与气',
+  one:'幕府与妖怪之界，咒力与气', outerName:'常暗', outerAlt:'外之物',
   flavor:'笔法像热血番：流派、宿敌、羁绊，招式名要喊出来，情绪要写在脸上',
   layout:'幕府压着各藩，藩主各怀心思；妖怪住在山里和都市的暗处；阴阳寮管妖怪，忍村替藩主干脏活；剑豪结流派、开道场，彼此较劲；还有一所星见学园，各家把有天分的孩子送去，学园里什么都教。',
   power:'两条路，一个人只能主修一条。咒力走阴阳师、咒术师的路子，气走剑豪、忍者、武斗家的路子。',
@@ -2662,7 +2738,7 @@ const JIE={
  '轮枢':{
   name:'轮枢', sigil:'◎', tint:'#b8923a', playable:false, open:false, reachable:true,
   surname:true, era:'万界历', months:['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'],
-  one:'万界交汇之城，不可投胎，只可前往',
+  one:'万界交汇之城，不可投胎，只可前往', outerName:'轮外之物', outerAlt:'命运神殿的官话',
   flavor:'笔法像异世界冒险者公会的故事：委托、酒馆、黑市、来路不明的人',
   layout:'一座城，谁都不归。冒险者公会发委托（F 到 S 级）；命运神殿掌占卜、替人问命，也是万界榜的发布处；万界商盟倒卖五界的货；黑市什么都卖。城里的人都是从别处来的，各带各的体系。',
   power:'轮枢没有自己的力量体系。主角仍按本身出身那一界的路子修行；城里的人各修各的，写谁就要点明他是哪一界来的。',
@@ -2700,7 +2776,7 @@ const JIE={
  '幽墟':{
   name:'幽墟', sigil:'☠', tint:'#6b4a8a', playable:false, open:false, reachable:true,
   surname:false, era:'无光', months:['第一月','第二月','第三月','第四月','第五月','第六月','第七月','第八月','第九月','第十月','第十一月','第十二月'],
-  one:'魔族深渊，去得了，回得来的少',
+  one:'魔族深渊，去得了，回得来的少', outerName:'祂', outerAlt:'连魔族也不肯多提',
   flavor:'笔法要压暗：没有日月，天底是一片不动的暗红。这里的东西都在慢慢吃你——空气、光、脚下的地。不要写得热闹，越静越不对劲',
   layout:'五界的大劫都从这里来。魔族三支各据一片：噬渊族在无光渊，最古的一支，靠吞食同类变强，越老的越不像样子；蚀骨族散在蚀心林，腐、疫、附骨，不正面打，缠上就甩不掉；幻面族没有定所，借形换脸，流进五界的多半是这一支。枯骨庭是一座不倒的骨城，亡灵在里头，有规矩，甚至讲道理。堕落者是从五界掉进来的活人，不成族，散居——有旧日的高手，有被放逐的，也有自己走进来的。',
   power:'幽墟没有自己的修行体系。进来的人还是按出生界那一套修，只是修得极慢。魔族靠吞食同类与掠夺生者的气机变强，那条路人走不了——写魔族的本事按族写，别把它写成一套能拜师学的功法。',
@@ -2944,6 +3020,7 @@ const REALM_LAW = `【世界铁律】
 - 姓名铁律：主角与已登场人物的**姓名**以面板为准，任何时候不可改写、换姓、换名。写自称时姓氏必须与面板一致。樱洲人姓在前。
   面板上已经登记的表字、爵位、法号、绰号、尊称可以照用（「$X道友」「维尔纳伯爵」「玄斋殿」），但不可现编一个面板上没有的。
 - 幽墟去得了，但不是能安居的地方；幽墟来的东西一律有代价。
+- **轮外之物**：五界之外还有东西。幽墟只是它的滩头，魔族三支是它带来的、或是被它改过的。它要啃的是命运之轮本身——轮一断，五界就再没人投胎，所以三界再有世仇，到那一步也得一起扛。真身谁也没见过，各界叫法不同：东荒叫噬轮者，西陆叫深渊之外者，樱洲叫常暗，轮枢的命运神殿称它轮外之物，幽墟的魔族只叫「祂」。**写哪一界的人，就只准用哪一界的叫法**——东荒的老道不会说「常暗」。在主角亲眼见到之前，这一切都只是传说、占卜和幸存者的胡话，不要写成板上钉钉的事。
 - 人物言行须符合其年龄、身份和性格。不要有太多阴谋暗线。
 - {{CHOSEN}}`;
 
@@ -4022,6 +4099,7 @@ function titleOf(p){
   else if(x>=40) t='薄有声望';
   else if(x>=20) t='小有名气';
   else t='无名之辈';
+  if(S&&S.outerBeaten) t='斩轮外者·'+t;
   const tv=tierOf(w);
   if(WCAP()>100&&skyTier(w)) t+='·'+skyTier(w);
   else if(w>=60) t+='·'+tv;
@@ -4050,6 +4128,7 @@ const ACHIEVEMENTS=[
  ['escape','溜之大吉',s=>s.stats.escapes>=1,'比武中成功脱身'],
  ['spare3','仁者之心',s=>s.stats.spares>=3,'三次饶过败者'],
  ['kill','手染鲜血',s=>s.stats.kills>=1,'第一次杀人'],
+ ['outer','轮外之敌',s=>!!s.outerBeaten,'斩了轮外之物'],
  ['kill5','杀人如麻',s=>s.stats.kills>=5,'杀五人'],
  ['fame40','小有名气',s=>s.player['声望']>=40,'声望达40'],
  ['fame70','名动一方',s=>s.player['声望']>=70,'声望达70'],
@@ -4380,6 +4459,18 @@ function showWinChoice(){
     duel.opp.alive=false; S.stats.kills++; ledger(`亲手杀了${duel.opp.name}`);
     if(inAbyss()&&/噬渊|蚀骨|幻面|枯骨庭/.test(String(duel.opp.faction||''))){
       voidAdd(-8); news(`${duel.opp.name}一死，这一片的动静小了些`);
+      // 当家的那一个才算头目
+      const clan=OUTER_CLANS.find(c=>String(duel.opp.faction||'').indexOf(c)>=0);
+      const isHead=/头目|首领|族长|之主|当家|长老/.test(String(duel.opp.identity||''))
+        || ((S.world&&S.world.factions)||[]).some(f=>f&&f.leader===duel.opp.name);
+      if(clan&&isHead){
+        S.outerHeads=S.outerHeads||[];
+        if(S.outerHeads.indexOf(clan)<0){
+          S.outerHeads.push(clan);
+          ledger(`斩了${clan}族的头目${duel.opp.name}`);
+          news(`${clan}族没了当家的，幽墟里乱了一阵`);
+        }
+      }
     }
     const r=(S.world.ranking||[]).find(x=>x.name===duel.opp.name); if(r) r.alive=false;
     S.player['恶名']=clamp(S.player['恶名']+(duel.opp.alignment==='邪道'?4:15));
@@ -5136,10 +5227,66 @@ function openCross(){
   });
   $('crossMask').classList.add('on');
 }
+function renderOuter(){
+  const box=$('outerCard'); if(!box||!S) return;
+  if(!hasOuterQuest()&&!S.outerBeaten){ box.style.display='none'; return; }
+  box.style.display='block';
+  $('outerSub').textContent=S.outerBeaten?'已了'
+    :(outerCooling()?`元气未复，还要 ${Math.max(0,num(S.outerCool)-num(S.months))} 个月`:`本界管它叫${outerName()}`);
+  const c=outerChain();
+  let html=c.map(x=>`<div class="ochk ${x.ok?'on':''}"><span class="obox">${x.ok?'✔':'○'}</span>`
+    +`<span class="otxt"><b>${esc(x.t)}</b><small>${esc(x.now)}</small></span></div>`).join('');
+  if(S.outerBeaten) html+=`<div class="note">你斩过它。轮还在转。</div>`;
+  else if(outerCooling()) html+=`<div class="note">上一役伤了元气，一时半刻动不了它。</div>`;
+  else if(outerReady()) html+=`<div class="gaterow"><button class="mbtn primary" id="btnOuter" style="width:100%">☠ 讨伐${esc(outerName())}</button></div>`;
+  else html+=`<div class="note">五条齐了才动得了它。最难的是末一条——想杀它，先得让三界肯一起出兵。</div>`;
+  $('outerList').innerHTML=html;
+  const b=$('btnOuter'); if(b) b.onclick=fightOuter;
+}
+// 决战：三阵取两胜。赢了世道大改，输了要么死，要么什么都没了
+async function fightOuter(){
+  if(!S||busy||!outerReady()) return;
+  const p=S.player, nm=outerName();
+  const bonus=Math.min(24, 10+(cursedHeld()-OUTER_RELICS)*2+((S.outerHeads||[]).length-OUTER_HEADS)*5);
+  let win=0;
+  for(let i=0;i<3;i++) if(rollCheck('修为', Math.max(40,80-bonus)).success) win++;
+  if(win>=2){
+    S.outerBeaten=true;
+    voidAdd(-200);
+    for(const k in S.ties) S.ties[k]=100;
+    const rk=(S.world&&S.world.ranking)||[];
+    let fell=0;
+    for(const r of rk) if(r&&r.alive!==false&&Math.random()<0.45){ r.alive=false; fell++; }
+    const q=(S.quests||[]).find(x=>x.kind==='outer');
+    if(q&&q.status==='进行中'){ q.status='完成'; q.progress=100; S.stats.questsDone++; }
+    p['声望']=clamp(num(p['声望'])+40);
+    ledger(`三界合兵，斩了${nm}`);
+    news(`${nm}被斩在幽墟底下。轮还在转——这一回，下一世还有得投`);
+    if(fell) news(`这一役过后，万界榜空了${fell}个位子`);
+    news('三界这些年的仇，暂时没人再提了');
+  }else if(num(fdm().storyDeath)>0){
+    S.outerCool=num(S.months)+OUTER_COOL;
+    ledger(`带着三界的联署去讨${nm}，败了`);
+    saveGame();
+    await gameOverFlow(`${p.name}带着三界的联署下了幽墟，去讨那件轮外的东西。没有人看见最后一眼`);
+    return;
+  }else{
+    p.attributes['修为']=Math.min(num(p.attributes['修为']),12);
+    for(const cat in (p.items||{})) p.items[cat]=(p.items[cat]||[]).filter(x=>!(x&&x.cursed));
+    forceInjury(`讨${nm}那一役`, true);      // 这一条不看自由度：败了就是要留下印记
+    S.outerCool=num(S.months)+OUTER_COOL;
+    ledger(`讨${nm}，败了。命还在，别的都没了`);
+    news('你活着回来了。修为散尽，身上那些幽墟的东西化成了灰');
+  }
+  rebuildStatus(); renderPanel(); renderWorld(); saveGame();
+}
 function renderWorld(){
   renderGate();
+  const oq=(S.quests||[]).find(x=>x.kind==='outer');
+  if(oq&&oq.status==='进行中') oq.progress=outerProgress();
   // 宿命
   $('wQuests').innerHTML=S.quests.length?S.quests.map(q=>`<div class="quest ${q.status==='完成'?'done':q.status==='失败'?'fail':''}"><div class="qt"><span>${esc(q.title)}</span><small>${q.status==='进行中'?q.progress+'%':q.status}</small></div><div class="qd">${esc(q.desc)}</div><div class="bar"><i style="width:${pw(q.progress)}%;background:${q.status==='完成'?'#4a6b45':'#8a6d2f'}"></i></div></div>`).join(''):'<div class="empty">尚无宿命，随剧情而生</div>';
+  renderOuter();
   // 万界榜
   const rk=S.world&&S.world.ranking||[];
   if(!rk.length){ $('wRanking').innerHTML='<div class="empty">万界榜尚未铸成</div><button class="mbtn" id="forgeWorld" style="width:100%;margin-top:6px">铸造当世格局</button>'; const b=$('forgeWorld'); if(b) b.onclick=forgeWorld; }

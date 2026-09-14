@@ -189,12 +189,133 @@ ok('定了「守幽墟」，本界这一轮不动手', await page.evaluate(()=>{
   return !S.ledger.slice(before).some(x=>/东荒与西陆开战/.test(x));
 }));
 
+console.log('\n【轮外之物】');
+ok('各界叫法不同，且铁律写明只准用本界的', await page.evaluate(()=>{
+  const nm=['东荒','西陆','樱洲','轮枢','幽墟'].map(k=>outerName(k));
+  return new Set(nm).size===5 && nm[0]==='噬轮者' && nm[2]==='常暗' && nm[4]==='祂'
+      && lawBlock().includes('只准用哪一界的叫法') && lawBlock().includes('轮一断，五界就再没人投胎');
+}));
+ok('没下过幽墟就没这桩宿命', await page.evaluate(()=>{
+  S.quests=(S.quests||[]).filter(q=>q.kind!=='outer');
+  return hasOuterQuest()===false&&$('outerCard').style.display!=='block';
+}));
+ok('下过一趟幽墟就背上了', await page.evaluate(()=>{
+  grantOuterQuest();
+  const q=(S.quests||[]).find(x=>x.kind==='outer');
+  return !!q&&q.status==='进行中'&&S.ledger.some(x=>/天大的宿命/.test(x));
+}));
+ok('五条件一条没齐时按钮不出来', await page.evaluate(()=>{
+  S.abyssMonths=0; S.outerHeads=[]; S.voidP=30;
+  renderWorld();
+  return outerReady()===false&&!document.getElementById('btnOuter');
+}));
+ok('幽墟的月数是累计的，不是当次的', await page.evaluate(()=>{
+  const r=S.realm, m=S.abyssMonths; S.realm='幽墟'; S.abyssMonths=0;
+  advanceTime(5); const a=S.abyssMonths;
+  S.realm=r; advanceTime(3); const b=S.abyssMonths;
+  S.abyssMonths=m; S.realm=r;
+  return a===5&&b===5;
+}));
+ok('只有当家的才算头目，同一支不重复计', await page.evaluate(()=>{
+  S.outerHeads=[];
+  const mk=(name,fac,id)=>({name,faction:fac,identity:id,alive:true});
+  const r=S.realm; S.realm='幽墟';
+  const rec=(o)=>{
+    const clan=OUTER_CLANS.find(c=>String(o.faction||'').indexOf(c)>=0);
+    const isHead=/头目|首领|族长|之主|当家|长老/.test(String(o.identity||''));
+    if(clan&&isHead&&S.outerHeads.indexOf(clan)<0) S.outerHeads.push(clan);
+  };
+  rec(mk('甲','噬渊族','小卒'));            // 不是头目
+  rec(mk('乙','噬渊族','族长'));            // 算
+  rec(mk('丙','噬渊族','族长'));            // 同一支，不重复
+  rec(mk('丁','蚀骨族','头目'));            // 第二支
+  S.realm=r;
+  return S.outerHeads.length===2&&S.outerHeads.indexOf('噬渊')>=0&&S.outerHeads.indexOf('蚀骨')>=0;
+}));
+ok('三件幽墟器物要一直带着，丢了就不算', await page.evaluate(()=>{
+  S.player.items['其他']=(S.player.items['其他']||[]).filter(x=>!x.cursed);
+  for(let i=0;i<3;i++) S.player.items['其他'].push({name:'骨器'+i,cursed:true,curse:'evil'});
+  const a=cursedHeld();
+  S.player.items['其他'].pop();
+  const b=cursedHeld();
+  S.player.items['其他'].push({name:'骨器2',cursed:true,curse:'evil'});
+  return a===3&&b===2;
+}));
+ok('界主还只是传闻，就签不了', await page.evaluate(()=>{
+  S.lords['樱洲']={name:'白河铃',rumor:true};
+  const r=lordSigned('樱洲');
+  return r.ok===false&&r.why.includes('亲自去见');
+}));
+ok('交情与名望两样都够才肯签', await page.evaluate(()=>{
+  S.npcs.push(normNpc({name:'西陆那位',gender:'男',age:50,identity:'国王','好感度':50,realm:'西陆'}));
+  S.lords['西陆']={name:'西陆那位',rumor:false,isPlayer:false,score:80,second:0};
+  S.player['声望']=100;
+  const a=lordSigned('西陆').ok;
+  findNpc('西陆那位')['好感度']=80;
+  const b=lordSigned('西陆').ok;
+  S.player['声望']=30;
+  const c=lordSigned('西陆').ok;
+  S.player['声望']=100;
+  return a===false&&b===true&&c===false;
+}));
+ok('自己就是界主，这一签不用求人', await page.evaluate(()=>{
+  S.lords['东荒']={name:S.player.name,rumor:false,isPlayer:true,score:99,second:0};
+  const r=lordSigned('东荒');
+  return r.ok===true&&r.why.includes('不用求人');
+}));
+ok('五条齐了才出讨伐按钮', await page.evaluate(()=>{
+  S.abyssMonths=30; S.outerHeads=['噬渊','蚀骨']; S.voidP=90;
+  S.lords['樱洲']={name:'樱洲那位',rumor:false,isPlayer:false,score:70,second:0};
+  S.npcs.push(normNpc({name:'樱洲那位',gender:'女',age:40,identity:'将军','好感度':90,realm:'樱洲'}));
+  S.outerCool=0; S.outerBeaten=false;
+  renderWorld();
+  return outerChain().every(x=>x.ok)&&outerReady()===true&&!!document.getElementById('btnOuter');
+}));
+ok('清单五条都摆在万界页上', await page.evaluate(()=>{
+  const t=$('outerCard').textContent;
+  return $('outerCard').style.display==='block'&&t.includes('熬满')&&t.includes('头目')&&t.includes('器物')&&t.includes('压力')&&t.includes('联署');
+}));
+ok('输了那两档是真会死（引擎口径）', await page.evaluate(()=>
+  num(FREEDOM.strict.storyDeath)>0&&num(FREEDOM.mid.storyDeath)>0&&num(FREEDOM.free.storyDeath)===0));
+ok('随心所欲档打输：不死，但什么都没了', await page.evaluate(async()=>{
+  const rnd0=Math.random; Math.random=()=>0;      // 掷 1 必败
+  const f=S.fd_peril; fdSet('peril','free');
+  S.player.attributes['修为']=90; S.scars=[];
+  await fightOuter();
+  Math.random=rnd0; fdSet('peril',f);
+  return S.outerBeaten!==true && S.player.attributes['修为']<=12 && cursedHeld()===0
+      && (S.scars||[]).length>0 && num(S.outerCool)>num(S.months);
+}));
+ok('伤了元气那二十四个月动不了它', await page.evaluate(()=>{
+  renderWorld();
+  return outerCooling()===true&&outerReady()===false&&!document.getElementById('btnOuter')
+      &&$('outerCard').textContent.includes('元气');
+}));
+ok('斩了它：压力清零、三界拉满、称号带上、宿命了结', await page.evaluate(async()=>{
+  const rnd0=Math.random; Math.random=()=>0.999;   // 掷 20 必成
+  S.outerCool=0; S.player.attributes['修为']=90;
+  for(let i=0;i<3;i++) S.player.items['其他'].push({name:'再拿的骨器'+i,cursed:true,curse:'evil'});
+  await fightOuter();
+  Math.random=rnd0;
+  const q=(S.quests||[]).find(x=>x.kind==='outer');
+  return S.outerBeaten===true && Math.round(voidP())===0
+      && Object.values(S.ties).every(v=>v===100)
+      && titleOf(S.player).indexOf('斩轮外者')===0
+      && q&&q.status==='完成'
+      && S.ledger.some(x=>/三界合兵/.test(x));
+}));
+ok('斩过之后不再出按钮，卡上只留一句', await page.evaluate(()=>{
+  renderWorld();
+  return !document.getElementById('btnOuter')&&$('outerCard').textContent.includes('轮还在转');
+}));
+
 console.log('\n【老存档】');
 ok('v11 升到 v12，局势从平常起步', await page.evaluate(()=>{
   const s={v:11,realm:'东荒',homeRealm:'东荒',months:0,wheelTurns:4,npcs:[],forged:['东荒'],
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0},player:{name:'甲',items:{},attributes:{'修为':10},'声望':10}};
   migrate(s);
-  return s.v>=12&&!!s.ties&&Object.values(s.ties).every(v=>v===50)&&s.voidP===40&&!!s.lords;
+  return s.v>=13&&!!s.ties&&Object.values(s.ties).every(v=>v===50)&&s.voidP===40&&!!s.lords
+      &&s.abyssMonths===0&&Array.isArray(s.outerHeads)&&s.outerBeaten===false;
 }));
 
 console.log('\n【手机 390×844】');
