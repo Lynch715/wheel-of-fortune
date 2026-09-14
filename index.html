@@ -230,8 +230,6 @@ body{
 .npc .nfav{text-align:right;font-size:13px;font-variant-numeric:tabular-nums}
 .npc .nfav .favnum{font-size:16px;font-weight:700}
 .dead{filter:grayscale(1);opacity:.55}
-#graphWrap{background:rgba(255,252,240,.5);border:1px solid var(--paper-edge);border-radius:6px;margin-bottom:12px}
-#graphWrap svg{display:block;width:100%}
 /* 万界页签 */
 .quest{padding:8px 0;border-bottom:1px dashed var(--paper-edge)}
 .quest:last-child{border-bottom:none}
@@ -540,7 +538,6 @@ body{
       <div class="card"><h3>🎒 其他</h3><div id="bagMisc"></div></div>
     </div>
     <div class="tabpane" id="tab-people">
-      <div id="graphWrap"></div>
       <div class="card"><h3>❈ 人物名录 <small>点击可交谈、切磋</small></h3><div id="npcList"></div></div>
     </div>
     <div class="tabpane" id="tab-world">
@@ -4916,7 +4913,7 @@ function favColor(n){
 function npcColor(n){ return n['爱恋值']!=null?'var(--pink)':(n.alignment==='邪道'?'#5a3a6a':(n.alignment==='正派'?'#4a6b45':'#7a6a50')); }
 function renderPeople(){
   const list=$('npcList');
-  if(!S.npcs.length){ list.innerHTML='<div class="empty">尚无故人</div>'; $('graphWrap').innerHTML=''; return; }
+  if(!S.npcs.length){ list.innerHTML='<div class="empty">尚无故人</div>'; return; }
   list.innerHTML=S.npcs.map((n,i)=>{
     const love=n['爱恋值']!=null;
     return `<div class="npc ${n.alive?'':'dead'}" data-i="${i}">
@@ -4930,45 +4927,6 @@ function renderPeople(){
   list.insertAdjacentHTML('beforeend',
     `<div class="peoplefoot">相识 ${liveN} 人${goneN?`　已故 ${goneN} 人`:''}　深谈 ${st.talks||0} 次　探得秘密 ${st.secrets||0} 桩${(S.vendettas||[]).filter(v=>v.heat>0).length?`　结仇 ${S.vendettas.filter(v=>v.heat>0).length} 家`:''}</div>`);
   list.querySelectorAll('.npc').forEach(el=>el.onclick=()=>showNpc(S.npcs[+el.dataset.i]));
-  renderGraph();
-}
-function renderGraph(){
-  const alive=S.npcs.slice(0,14);
-  const W=344,H=Math.max(236,132+alive.length*12);
-  const cx=W/2,cy=H/2,rx=W/2-54,ry=H/2-42;
-  let edges='',nodes='';
-  // 底下垫两圈淡淡的同心环，空处不至于太空
-  const rings=`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="#c9b88f" stroke-width="1" stroke-dasharray="3 5" opacity=".55"/>
-    <ellipse cx="${cx}" cy="${cy}" rx="${rx*0.55}" ry="${ry*0.55}" fill="none" stroke="#c9b88f" stroke-width="1" stroke-dasharray="2 6" opacity=".35"/>`;
-  alive.forEach((n,i)=>{
-    const a=-Math.PI/2+i*2*Math.PI/alive.length;
-    const x=cx+rx*Math.cos(a),y=cy+ry*Math.sin(a);
-    const love=n['爱恋值']!=null;
-    const val=love?n['爱恋值']:n['好感度'];
-    let ec='#8a7a60';
-    if(!n.alive) ec='#aaa'; else if(love) ec='#b05a72'; else if(val>=70) ec='#4a6b45'; else if(val<=15) ec=accentColor();
-    const w=1+val/40;
-    const r=n.alive?(13+Math.round(val/12)):13;   // 交情越深，人越显眼
-    edges+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${ec}" stroke-width="${n.alive?w:1}" stroke-dasharray="${n.alive?'none':'4 4'}" opacity=".65" stroke-linecap="round"/>`;
-    const ring=avRing(n);
-    const face=`<clipPath id="gav${i}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>
-      <image href="${inkFace(n)}" x="${x-r}" y="${y-r}" width="${r*2}" height="${r*2}"
-        clip-path="url(#gav${i})" opacity="${n.alive?1:.5}" style="${n.alive?'':'filter:grayscale(1)'}"/>
-      <circle cx="${x}" cy="${y}" r="${r-1}" fill="none" stroke="${n.alive?ring:'#999'}" stroke-width="2.5"/>`;
-    nodes+=`<g class="gnode" data-i="${i}" style="cursor:pointer">
-      <circle cx="${x}" cy="${y}" r="${r+3}" fill="var(--paper)" opacity=".9"/>
-      ${face}
-      <text x="${x}" y="${y+32}" text-anchor="middle" font-size="11" fill="var(--ink-soft)">${esc(n.name)}</text>
-      <text x="${x}" y="${y-24}" text-anchor="middle" font-size="10" fill="var(--gold-deep)">${esc(n.relation)}</text>
-    </g>`;
-  });
-  const mr=21;
-  const meFace=`<clipPath id="gavme"><circle cx="${cx}" cy="${cy}" r="${mr}"/></clipPath>
-    <image href="${inkFace(S.player,true)}" x="${cx-mr}" y="${cy-mr}" width="${mr*2}" height="${mr*2}" clip-path="url(#gavme)"/>
-    <circle cx="${cx}" cy="${cy}" r="${mr-1}" fill="none" stroke="${accentColor()}" stroke-width="3"/>`;
-  const me=`<circle cx="${cx}" cy="${cy}" r="26" fill="${accentColor()}" opacity=".16"/>${meFace}`;
-  $('graphWrap').innerHTML=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${rings}${edges}${me}${nodes}</svg>`;
-  $('graphWrap').querySelectorAll('.gnode').forEach(el=>el.onclick=()=>showNpc(S.npcs[+el.dataset.i]));
 }
 function showNpc(n){
   $('npcMTitle').textContent=n.name+(n.alive?'':'〔亡故〕');
