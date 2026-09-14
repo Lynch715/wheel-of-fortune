@@ -17,15 +17,21 @@ page=await ctx.newPage();
 const errs=[]; page.on('pageerror',e=>errs.push(String(e)));
 // 连通性自测故意打了几个 401/402/404，浏览器会在控制台叫，不算页面报错
 page.on('console',m=>{ if(m.type()==='error'&&!/Failed to load resource/.test(m.text())) errs.push('console:'+m.text()); });
+const hits=[];
 await page.route('**/chat/completions',async route=>{
+  const u=route.request().url();
   const b=JSON.parse(route.request().postData());
   const auth=route.request().headers()['authorization']||'';
-  // 连通性自测用的是最小请求，拿它来演各种错
-  if(b.max_tokens===16){
+  hits.push(u);
+  // 连通性自测发的是短请求（max_tokens 64），拿它来演各种错
+  if(b.max_tokens===64){
     if(/sk-bad/.test(auth)) return route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({error:{message:'Invalid API key'}})});
     if(/sk-poor/.test(auth)) return route.fulfill({status:402,contentType:'application/json',body:JSON.stringify({error:{message:'Insufficient balance'}})});
     if(/sk-404/.test(auth)) return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:{message:'Model not found'}})});
-    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({model:'deepseek-v4-flash',choices:[{message:{content:'通了'}}]})});
+    // 这把 key 专演「地址少写了 /v1」：不带 /v1 的就 404，带了才通
+    if(/sk-needv1/.test(auth)&&!/\/v1\/chat\/completions$/.test(u))
+      return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:{message:'Not Found'}})});
+    return route.fulfill({status:200,headers:{'Content-Type':'text/event-stream'},body:sse({ok:1})});
   }
   await route.fulfill({status:200,headers:{'Content-Type':'text/event-stream'},body:sse(pickBody(b.messages[b.messages.length-1].content))});
 });
@@ -46,12 +52,25 @@ ok('key 空着存不下，且说人话', (await page.textContent('#cfgTestMsg'))
 ok('没 key 时进不了投胎', await page.evaluate(()=>{ openCreate(); return !$('createMask').classList.contains('on'); }));
 
 console.log('\n【F3 连通性自测】');
+await page.fill('#cfgBase','https://api.example.com');
 const type=async(k)=>{ await page.fill('#cfgKey',k); await page.click('#cfgTest'); await page.waitForFunction(()=>!$('cfgTest').disabled,null,{timeout:15000}); return page.textContent('#cfgTestMsg'); };
 ok('401 说 key 不对', (await type('sk-bad')).includes('key 不对'));
 ok('402 说没余额', (await type('sk-poor')).includes('没余额'));
 ok('404 说模型名或地址不对', (await type('sk-404')).includes('模型名或接口地址不对'));
 const good=await type('sk-test');
 ok('通了会报模型名、回的字和耗时：'+good.slice(0,40), good.includes('通了')&&good.includes('毫秒'));
+// 「能推演剧情，自测却不通」就是这儿出的岔子：两处拼地址的算法必须是同一个
+ok('自测和正式调用拼的是同一个地址', await page.evaluate(()=>apiUrl('https://api.example.com/')==='https://api.example.com/chat/completions'));
+ok('自测没有多接一层 /v1', hits.length>0&&hits[hits.length-1]==='https://api.example.com/chat/completions');
+ok('自测发的请求跟正式推演同一种（流式 + json_object）', await page.evaluate(()=>{
+  const b=apiBody('deepseek-v4-flash',[{role:'user',content:'x'}],64);
+  return b.stream===true&&b.response_format&&b.response_format.type==='json_object'&&!!b.thinking;
+}));
+const needv1=await type('sk-needv1');
+ok('地址少写 /v1 时会自己补上再试，并告诉你该怎么改：'+needv1.slice(-46),
+   needv1.includes('通了')&&needv1.includes('https://api.example.com/v1'));
+ok('补 /v1 那次真的打到了带 /v1 的地址', hits[hits.length-1]==='https://api.example.com/v1/chat/completions');
+await page.fill('#cfgBase','https://api.example.com');
 await page.click('#cfgSave'); await page.waitForTimeout(300);
 ok('存下之后设置关掉了', !(await page.evaluate(()=>$('settingsMask').classList.contains('on'))));
 ok('存下之后直接弹投胎', await page.evaluate(()=>$('createMask').classList.contains('on')));

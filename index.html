@@ -3200,13 +3200,22 @@ ${JSON_RULE}
 }
 
 /* ================= LLM 调用 ================= */
+// 接口地址只在这儿拼一次。以前自测多接了一层 /v1，结果「能推演剧情但自测不通」
+function apiUrl(base){ return String(base||'').replace(/\/+$/,'')+'/chat/completions'; }
+// 自测和正式调用发的是同一种请求体（流式 + json_object + deepseek 的 thinking），
+// 免得自测通了正式调用却不通，或者反过来
+function apiBody(model, msgs, maxTokens){
+  const b={ model:model||'deepseek-v4-flash', messages:msgs, temperature:1, max_tokens:maxTokens||64,
+            stream:true, response_format:{type:'json_object'} };
+  if(/deepseek/i.test(b.model)) b.thinking={type: cfg.think?'enabled':'disabled'};
+  return b;
+}
 let lastFinish=null;
 async function callLLM(prompt, onPartial, opt){
   opt=opt||{};
   lastFinish=null;
   if(!cfg.key){ openSettings(); throw new Error('请先在设置中填写密钥'); }
-  const base = cfg.base.replace(/\/+$/,'');
-  const url = base + '/chat/completions';
+  const url = apiUrl(cfg.base);
   const body = {
     model: cfg.model||'deepseek-v4-flash',
     messages: opt.noSystem?[{role:'user',content:prompt}]:[{role:'system',content:styleSystem()},{role:'user',content:prompt}],
@@ -5783,36 +5792,65 @@ function cfgMsg(t,cls){
   el.style.color=cls==='bad'?'var(--accent)':(cls==='ok'?'#4a6b45':'');
 }
 // 拿框里现填的三项真发一次请求，错误分档说人话
+// 真发一次，发的东西跟正式推演一模一样（流式、json_object、thinking），只是短
+async function testShot(url, key, model, signal){
+  const r=await fetch(url,{
+    method:'POST', signal,
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+    body:JSON.stringify(apiBody(model,[
+      {role:'system',content:'你是一个只输出 JSON 的接口自测靶子。'},
+      {role:'user',content:'只输出 {"ok":1}，别的一个字都不要。'}],64))
+  });
+  if(!r.ok){
+    let detail='';
+    try{ const j=await r.json(); detail=(j&&j.error&&(j.error.message||j.error.type))||''; }catch(_){}
+    return {ok:false, status:r.status, detail};
+  }
+  const raw=await r.text();
+  let txt='', got=false;
+  for(const line of raw.split('\n')){
+    if(line.indexOf('data:')!==0) continue;
+    const p=line.slice(5).trim();
+    if(!p||p==='[DONE]') continue;
+    got=true;
+    try{ const d=JSON.parse(p); txt+=((d.choices&&d.choices[0]&&d.choices[0].delta&&d.choices[0].delta.content)||''); }catch(_){}
+  }
+  if(!got){                                  // 不是 SSE：有的接口只给非流式，那也算通
+    try{ const j=JSON.parse(raw); txt=((j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||''); got=true; }catch(_){}
+  }
+  return {ok:true, got, txt:String(txt).trim().slice(0,24)};
+}
 async function testConn(){
-  const base=($('cfgBase').value.trim()||'https://api.deepseek.com').replace(/\/+$/,'');
+  const baseIn=$('cfgBase').value.trim()||'https://api.deepseek.com';
   const key=$('cfgKey').value.trim();
   const model=$('cfgModel').value.trim()||'deepseek-v4-flash';
   if(!key){ cfgMsg('key 还没填。','bad'); return; }
   const btn=$('cfgTest'); btn.disabled=true; const old=btn.textContent; btn.textContent='正在试……';
-  cfgMsg('正在发一次最小请求……');
+  cfgMsg('正在发一次请求，跟正式推演发的是同一种……');
   const t0=Date.now();
   const ctl=new AbortController();
-  const timer=setTimeout(()=>ctl.abort(),25000);
+  const timer=setTimeout(()=>{ try{ ctl.abort(); }catch(_){} },25000);
+  const SAY={401:'key 不对或者过期了',403:'key 没有这个模型的权限',404:'模型名或接口地址不对',
+             400:'请求被拒了，多半是模型名不对',402:'账户没余额了',429:'被限流了，等一会儿再试',
+             500:'对面服务器出错了',502:'对面网关出错了',503:'对面服务暂时不可用'};
   try{
-    const r=await fetch(base+'/v1/chat/completions',{
-      method:'POST', signal:ctl.signal,
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model,messages:[{role:'user',content:'回两个字：通了'}],max_tokens:16,stream:false})
-    });
+    let url=apiUrl(baseIn), hint='';
+    let res=await testShot(url,key,model,ctl.signal);
+    // 404：可能是地址少写了 /v1。补上再试一次，成了就告诉他该怎么填
+    if(!res.ok&&res.status===404&&!/\/v1$/.test(baseIn.replace(/\/+$/,''))){
+      const url2=apiUrl(baseIn.replace(/\/+$/,'')+'/v1');
+      const res2=await testShot(url2,key,model,ctl.signal);
+      if(res2.ok){ res=res2; url=url2; hint='　⚠ 地址要补一段：请把上面的接口地址改成 '+baseIn.replace(/\/+$/,'')+'/v1 ，否则正式推演还是走不通。'; }
+    }
     clearTimeout(timer);
     const ms=Date.now()-t0;
-    if(!r.ok){
-      let detail='';
-      try{ const j=await r.json(); detail=(j&&j.error&&(j.error.message||j.error.type))||''; }catch(_){}
-      const say={401:'key 不对或者过期了',403:'key 没有这个模型的权限',404:'模型名或接口地址不对',
-                 402:'账户没余额了',429:'被限流了，等一会儿再试',500:'对面服务器出错了',503:'对面服务暂时不可用'}[r.status]
-                 ||('对面回了 '+r.status);
-      cfgMsg(say+(detail?'（'+detail.slice(0,80)+'）':''),'bad');
+    if(!res.ok){
+      const say=SAY[res.status]||('对面回了 '+res.status);
+      cfgMsg(say+(res.detail?'（'+res.detail.slice(0,80)+'）':'')+'　（试的是 '+url+'）','bad');
       return;
     }
-    const j=await r.json();
-    const txt=((j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'').trim().slice(0,20);
-    cfgMsg(`通了：${j.model||model} 回了「${txt||'（空）'}」，耗时 ${ms} 毫秒。记得点「保存」存下。`,'ok');
+    if(!res.got){ cfgMsg('连上了，但回的东西看不懂——可能不是 OpenAI 兼容的接口。（试的是 '+url+'）','bad'); return; }
+    cfgMsg(`通了：${model} 回了「${res.txt||'（空）'}」，耗时 ${ms} 毫秒。记得点「保存」存下。`+hint, hint?'bad':'ok');
   }catch(e){
     clearTimeout(timer);
     if(e&&e.name==='AbortError'){ cfgMsg('25 秒没回应。要么网不通，要么地址写错了。','bad'); return; }
