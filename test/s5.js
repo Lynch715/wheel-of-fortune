@@ -72,6 +72,7 @@ console.log('\n【求引荐】');
 ok('神殿的按钮只在轮枢出现', await page.evaluate(()=>{ renderGate(); return !!document.getElementById('btnSeekPass'); }));
 ok('求引荐要花钱，成了就落一张引荐状', await page.evaluate(()=>{
   S.player.attributes['悟性']=95; S.player['声望']=80;      // 判定必成，只看流程
+  S.player.money=Math.max(num(S.player.money),2000);        // 香火钱按声望浮动，别让出身穷把这条卡掉
   const before=S.player.money;
   seekAbyssPass();
   return S.player.money<before && !!abyssPass() && S.ledger.some(x=>/求得引荐状/.test(x));
@@ -173,8 +174,9 @@ ok('写明主角修的仍是西陆那一套', jb.includes('他是西陆人')||jb
 ok('写明这儿问得到别处问不到的事', jb.includes('别处问不到的事')&&jb.includes('rumors'));
 ok('地名表挂上了横幅', await page.evaluate(()=>{
   const l=S.scene.location; S.scene.location='无光渊'; const k=sceneKey();
-  S.scene.location='枯骨庭'; const k2=sceneKey(); S.scene.location=l;
-  return k==='sc_a_abyss'&&k2==='sc_a_waste';
+  S.scene.location='枯骨庭'; const k2=sceneKey();
+  S.scene.location='蚀心林'; const k3=sceneKey(); S.scene.location=l;
+  return k==='sc_a_abyss'&&k2==='sc_a_bone'&&k3==='sc_a_forest';
 }));
 
 ok('幽墟不入万界榜', await page.evaluate(()=>

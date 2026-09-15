@@ -110,7 +110,13 @@ ok('东荒市镇 → 市镇', await page.evaluate(()=>{ S.scene.location='山下
 ok('界门不分界都用界门那张', await page.evaluate(()=>{ S.scene.location='界门之前'; return sceneKey()==='sc_h_gate'; }));
 ok('樱洲学园 → 校舍', await page.evaluate(()=>{ const r=S.realm; S.realm='樱洲'; S.scene.location='星见学园的教室'; const k=sceneKey(); S.realm=r; return k==='sc_s_school'; }));
 ok('西陆酒馆 → 酒馆', await page.evaluate(()=>{ const r=S.realm; S.realm='西陆'; S.scene.location='城里的酒馆'; const k=sceneKey(); S.realm=r; return k==='sc_w_tavern'; }));
-ok('十八张场景都在', await page.evaluate(()=>Object.keys(SCENE_IMG).length===18));
+ok('二十六张场景都在', await page.evaluate(()=>Object.keys(SCENE_IMG).length===26));
+ok('八张新机制横幅都接上了', await page.evaluate(()=>
+  ['sc_d_tide','sc_w_tide','sc_s_tide','sc_war','sc_court','sc_h_oracle','sc_a_bone','sc_a_forest']
+    .every(k=>SCENE_IMG[k])));
+ok('十八张立绘都在', await page.evaluate(()=>Object.keys(POR_IMG).length===18));
+ok('十七种特型各有一张立绘', await page.evaluate(()=>
+  AV_SLOTS.filter(x=>x.charAt(0)==='x').every(k=>k==='x_child'||POR_IMG[k])));
 await page.evaluate(()=>{ S.scene.location='云台观山门'; renderScene(); });
 await page.waitForTimeout(300);
 ok('正文区真的铺上了淡背景', await page.evaluate(()=>{

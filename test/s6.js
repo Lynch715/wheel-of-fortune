@@ -189,6 +189,34 @@ ok('定了「守幽墟」，本界这一轮不动手', await page.evaluate(()=>{
   return !S.ledger.slice(before).some(x=>/东荒与西陆开战/.test(x));
 }));
 
+// 新机制横幅：状态压过地名（美术 v2.1 第 1.3 节）
+ok('身为界主，卡顶挂上朝堂那张', await page.evaluate(()=>
+  !!document.querySelector('#wGate .courtbar')));
+ok('不是界主就没有这一条', await page.evaluate(()=>{
+  const keep=S.lords['东荒']; S.lords['东荒']={name:'旁人',score:999,second:0};
+  renderGate(); const gone=!document.querySelector('#wGate .courtbar');
+  S.lords['东荒']=keep; renderGate(); return gone;
+}));
+ok('魔潮那两个月，当界横幅换成魔劫', await page.evaluate(()=>{
+  const l=S.scene.location, sv=S.tideSev, go=S.gateOpen;
+  S.scene.location='云台观'; S.gateOpen=true; S.tideSev=2;
+  const k=sceneKey();
+  S.scene.location=l; S.tideSev=sv; S.gateOpen=go;
+  return k==='sc_d_tide';
+}));
+ok('魔潮过去就换回常规横幅', await page.evaluate(()=>{
+  const l=S.scene.location, sv=S.tideSev; S.scene.location='云台观'; S.tideSev=0;
+  const k=sceneKey(); S.scene.location=l; S.tideSev=sv;
+  return k!=='sc_d_tide';
+}));
+ok('本界开着战就换战场那张', await page.evaluate(()=>{
+  const l=S.scene.location, sv=S.tideSev, go=S.gateOpen, t=S.ties['东荒-西陆'];
+  S.scene.location='云台观'; S.tideSev=0; S.gateOpen=true; S.ties['东荒-西陆']=10;
+  const k=sceneKey();
+  S.scene.location=l; S.tideSev=sv; S.gateOpen=go; S.ties['东荒-西陆']=t;
+  return k==='sc_war';
+}));
+
 console.log('\n【轮外之物】');
 ok('各界叫法不同，且铁律写明只准用本界的', await page.evaluate(()=>{
   const nm=['东荒','西陆','樱洲','轮枢','幽墟'].map(k=>outerName(k));
