@@ -184,11 +184,10 @@ body{
 #jieShot.on{display:block;animation:jieIn .45s ease}
 @keyframes jieIn{from{opacity:0;transform:scale(1.03)}to{opacity:1;transform:none}}
 .outerpic{display:block;margin:2px auto 8px;max-width:190px;width:60%;filter:drop-shadow(0 6px 22px rgba(0,0,0,.5))}
-.duelpor{position:absolute;right:-14px;bottom:-10px;width:108px;pointer-events:none;opacity:.82;z-index:0;
-  -webkit-mask-image:linear-gradient(to right,transparent,#000 42%);mask-image:linear-gradient(to right,transparent,#000 42%)}
-.fighter .fhead,.fighter .blab,.fighter .bar{position:relative;z-index:1}
-@media (max-width:900px){.duelpor{width:78px;right:-16px;opacity:.7}}
-.convopor{position:absolute;right:0;bottom:0;width:120px;pointer-events:none;opacity:.9;z-index:0}
+/* 立绘要竖着的地方才站得住：面谈单开一列，人物详情放在名字旁边。
+   比武那条头只有 44px 高，塞进去就是穿帮，所以那儿不放。 */
+.npcpor{float:right;width:118px;margin:-6px -4px 4px 10px;shape-outside:content-box}
+@media (max-width:520px){.npcpor{width:92px}}
 .lore p{margin:0 0 9px;line-height:1.95;font-size:13.5px;color:var(--ink-soft)}
 .lore p:last-child{margin-bottom:0}
 .lore b{color:var(--ink);font-weight:600}
@@ -422,6 +421,12 @@ body{
 @media (max-width:520px){.stances{grid-template-columns:repeat(3,1fr)}}
 /* 对话 */
 #convoModal{padding:20px 22px;display:flex;flex-direction:column;max-height:88vh}
+#convoPor{display:none}
+#convoModal.haspor{flex-direction:row;gap:16px;align-items:stretch}
+#convoModal.haspor #convoPor{display:block;flex:0 0 156px;width:156px;align-self:flex-end;
+  margin-bottom:-20px;min-height:340px;background-repeat:no-repeat;background-position:bottom center;background-size:contain}
+#convoModal.haspor #convoBody{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+@media (max-width:900px){#convoModal.haspor{flex-direction:column}#convoModal.haspor #convoPor{display:none}}
 #convoHead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
 #convoHead .avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;color:var(--on-accent);flex-shrink:0}
 #convoHead .cinfo{flex:1;min-width:0}
@@ -781,6 +786,8 @@ body{
 <!-- 对话弹窗 -->
 <div class="modal-mask" id="convoMask">
   <div class="modal wide" id="convoModal">
+    <div id="convoPor"></div>
+    <div id="convoBody">
     <div id="convoHead"></div>
     <div id="convoMsgs"></div>
     <div id="convoGift" class="giftlist" style="display:none"></div>
@@ -789,6 +796,7 @@ body{
       <button class="cbtn" id="convoSend">说</button>
       <button class="cbtn alt" id="convoGiftBtn">赠礼</button>
       <button class="cbtn alt" id="convoEnd" title="随时可以走（Esc 或点空白处也行）">告辞</button>
+    </div>
     </div>
   </div>
 </div>
@@ -4289,8 +4297,7 @@ function renderDuel(){
   $('fP').innerHTML=`<div class="fhead">${avatarFace(p,'duelface',null,true)}<div><div class="fname">${esc(p.name)}</div><div class="fsub">${esc(titleOf(p))} · 修为${duel.pW}</div></div></div>
     <div class="blab"><span>气血</span><span>${duel.pHp}/100</span></div>${bar(duel.pHp,100,duel.pHp<30?accentColor():'#4a6b45')}
     <div class="blab"><span>功力</span><span>${duel.pQi}</span></div>${bar(duel.pQi,100,'#4a6b8a','qi')}`;
-  const oPor=porOf(o);
-  $('fO').innerHTML=`${oPor?`<img class="duelpor" src="${oPor}" alt="">`:''}<div class="fhead ro">${avatarFace(o,'duelface')}<div><div class="fname">${esc(o.name)}</div><div class="fsub">${esc(o.identity)} · 修为${duel.oppW}</div></div></div>
+  $('fO').innerHTML=`<div class="fhead ro">${avatarFace(o,'duelface')}<div><div class="fname">${esc(o.name)}</div><div class="fsub">${esc(o.identity)} · 修为${duel.oppW}</div></div></div>
     <div class="blab"><span>气血</span><span>${duel.oHp}/100</span></div>${bar(duel.oHp,100,duel.oHp<30?accentColor():'#4a6b45')}
     <div class="blab"><span>功力</span><span>${duel.oQi}</span></div>${bar(duel.oQi,100,'#4a6b8a','qi')}`;
   const act=$('duelActions');
@@ -4805,6 +4812,11 @@ function openConvo(npc){
 }
 function renderConvoHead(){
   const n=convo.npc, love=n['爱恋值']!=null;
+  const por=porOf(n), pb=$('convoPor'), md=$('convoModal');
+  if(md&&pb){
+    if(por){ pb.style.backgroundImage=`url('${por}')`; md.classList.add('haspor'); }
+    else { pb.style.backgroundImage=''; md.classList.remove('haspor'); }
+  }
   $('convoHead').innerHTML=`${avatarFace(n)}
   <div class="cinfo"><div class="cname">${esc(n.name)}</div><div class="cmood">${esc(n.relation)} · ${esc(n.identity)} · 心情：${esc(n.mood||'平静')}</div></div>
   <div class="cfav"><b style="color:${favColor(n)}">${love?n['爱恋值']:n['好感度']}</b>${love?'爱恋':'好感'}</div>`;
@@ -5047,7 +5059,9 @@ function showNpc(n){
     ['性格',(n.personality||[]).join('、')||'—'],
     ['相貌',[npcPortrait(n),n.appearance].filter(Boolean).join('；')||'—'],['备注',n.notes||'—']
   ];
-  let html=`<div class="npchead">${avatarFace(n,'',null)}<div class="nh">${esc(n.alignment||'中立')} · ${esc(n.relation||'')}<br>${esc(n.identity||'')}${n.faction?'　'+esc(n.faction):''}</div></div>`
+  const npor=porOf(n);
+  let html=(npor?`<img class="npcpor" src="${npor}" alt="">`:'')
+    + `<div class="npchead">${avatarFace(n,'',null)}<div class="nh">${esc(n.alignment||'中立')} · ${esc(n.relation||'')}<br>${esc(n.identity||'')}${n.faction?'　'+esc(n.faction):''}</div></div>`
     + rows.map(([k,v])=>`<div class="nrow"><b>${k}</b><span>${esc(v)}</span></div>`).join('');
   if(n.memory&&n.memory.length) html+=`<div class="nrow"><b>往来</b><span>${esc(n.memory.join('；'))}</span></div>`;
   html+=n.secretKnown?`<div class="secret">✦ 你所知的秘密：${esc(n.secret)}</div>`:`<div class="secret" style="color:var(--ink-faint)">此人似有心事。深谈、说服、威胁，或许能探出他的秘密。</div>`;
