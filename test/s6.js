@@ -309,12 +309,70 @@ ok('斩过之后不再出按钮，卡上只留一句', await page.evaluate(()=>{
   return !document.getElementById('btnOuter')&&$('outerCard').textContent.includes('轮还在转');
 }));
 
+console.log('\n【世界观卡与减字】');
+ok('世界观卡在万界页最上面，默认展开', await page.evaluate(()=>{
+  renderWorld();
+  const pane=document.getElementById('tab-world');
+  return pane.firstElementChild.id==='loreCard'
+      && $('loreBody').style.display!=='none'
+      && $('loreBody').textContent.includes('万界像一只轮');
+}));
+ok('第一层写清了轮、三界、界门和你生在哪儿', await page.evaluate(()=>{
+  const t=$('loreBody').textContent;
+  return t.includes('你生在')&&t.includes('灵气')&&t.includes('斗气')&&t.includes('咒力')&&t.includes('开两个月');
+}));
+ok('没去过轮枢就不提轮枢', await page.evaluate(()=>{
+  const f=S.forged, r=S.realm; S.forged=['东荒']; S.realm='东荒';
+  const a=loreParas().join('');
+  S.forged=f; S.realm=r;
+  return !a.includes('五界中间那座城');
+}));
+ok('去过了才提', await page.evaluate(()=>{
+  const f=S.forged; S.forged=['东荒','轮枢'];
+  const a=loreParas().join(''); S.forged=f;
+  return a.includes('五界中间那座城');
+}));
+ok('压力没起来、也没下过幽墟，就不提幽墟会打上来', await page.evaluate(()=>{
+  const v=S.voidP, m=S.abyssMonths, r=S.realm;
+  S.voidP=20; S.abyssMonths=0; S.realm='东荒';
+  const a=loreParas().join('');
+  S.voidP=v; S.abyssMonths=m; S.realm=r;
+  return !a.includes('百鬼夜行');
+}));
+ok('压力上来了就提', await page.evaluate(()=>{
+  const v=S.voidP; S.voidP=50;
+  const a=loreParas().join(''); S.voidP=v;
+  return a.includes('百鬼夜行')&&a.includes('勉强站到一块儿');
+}));
+ok('背上那桩宿命之后才说轮会断', await page.evaluate(()=>{
+  const q=S.quests, b=S.outerBeaten;
+  S.quests=(S.quests||[]).filter(x=>x.kind!=='outer'); S.outerBeaten=false;
+  const a=loreParas().join('');
+  S.quests=q; S.outerBeaten=b;
+  const c=loreParas().join('');
+  return !a.includes('没有下一世')&&c.includes('没有下一世');
+}));
+ok('点标题能收起，而且记得住', await page.evaluate(()=>{
+  toggleLore();
+  const closed=$('loreBody').style.display==='none'&&S.loreSeen===1;
+  toggleLore();
+  return closed&&$('loreBody').style.display!=='none';
+}));
+ok('自由度底下那行数值罗列没了', await page.evaluate(()=>
+  !document.getElementById('cfgFreeNote')&&!document.getElementById('crFreeNote')&&typeof window.freedomNote==='undefined'));
+ok('界门卡不再有「已轮转N次」和那条分隔线', await page.evaluate(()=>{
+  renderGate(); const t=$('wGate').textContent;
+  return !t.includes('已轮转')&&!t.includes('──────');
+}));
+ok('宿命卡副标题只剩一句', (await page.textContent('#tab-world')).includes('你此生要追的事')
+   && !(await page.textContent('#tab-world')).includes('引擎只管记账'));
+
 console.log('\n【老存档】');
 ok('v11 升到 v12，局势从平常起步', await page.evaluate(()=>{
   const s={v:11,realm:'东荒',homeRealm:'东荒',months:0,wheelTurns:4,npcs:[],forged:['东荒'],
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0},player:{name:'甲',items:{},attributes:{'修为':10},'声望':10}};
   migrate(s);
-  return s.v>=13&&!!s.ties&&Object.values(s.ties).every(v=>v===50)&&s.voidP===40&&!!s.lords
+  return s.v>=14&&s.loreSeen===0&&!!s.ties&&Object.values(s.ties).every(v=>v===50)&&s.voidP===40&&!!s.lords
       &&s.abyssMonths===0&&Array.isArray(s.outerHeads)&&s.outerBeaten===false;
 }));
 

@@ -159,7 +159,7 @@ ok('轮枢随时可去，不看轮转', await page.evaluate(()=>{
   const t=crossTargets().find(x=>x.key==='轮枢'); S.gateOpen=g;
   return !!t&&t.ok===true;
 }));
-ok('过界说明写明可以借轮枢中转', await page.evaluate(()=>{ openCross(); const t=document.querySelector('.gaterule').textContent; $('crossMask').classList.remove('on'); return t.includes('走轮枢中转')&&t.includes('轮转还管什么'); }));
+ok('过界说明只留两句，写明可以借轮枢中转', await page.evaluate(()=>{ openCross(); const t=document.querySelector('.gaterule').textContent; $('crossMask').classList.remove('on'); return t.includes('先去轮枢，再转过去')&&t.length<130; }));
 ok('仇家隔着界恨涨得慢，不是冻住', await page.evaluate(()=>{
   const n=S.npcs[0]; n.realm='东荒'; S.realm='樱洲';
   S.vendettas=[{name:n.name,reason:'试',heat:10,cool:0}];

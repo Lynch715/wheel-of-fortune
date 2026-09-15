@@ -99,10 +99,9 @@ ok('同一个人每次同一张脸', await page.evaluate(()=>{
 console.log('\n【界门说明】');
 await page.evaluate(()=>openCross()); await page.waitForTimeout(250);
 const gr=await page.textContent('.gaterule');
-ok('过界弹窗里写了去干嘛', gr.includes('冒险者公会')&&gr.includes('跳板'));
-ok('写了怎么过去（时机与门路）', gr.includes('两个月')&&gr.includes('价钱翻倍'));
-ok('写了过去之后的代价', gr.includes('只剩五成')&&gr.includes('例银领不到')&&gr.includes('他自己凑盘缠也会追过来'));
-ok('写了幽墟怎么下去怎么上来', gr.includes('引荐状')&&gr.includes('下来那一趟的两倍')&&gr.includes('幽墟不可投胎'));
+ok('规则只剩两句，不再是说明书', gr.includes('轮枢常年通着')&&gr.includes('两趟盘缠')&&gr.length<130);
+ok('过界弹窗不再提前灌幽墟那一大段', !gr.includes('引荐状')&&!gr.includes('侵蚀')&&!gr.includes('不可投胎'));
+ok('副标题只说人在哪儿', (await page.textContent('#crossSub')).length<20);
 await page.evaluate(()=>$('crossMask').classList.remove('on')); await page.waitForTimeout(150);
 
 console.log('\n【场景横幅】');

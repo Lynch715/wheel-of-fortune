@@ -44,10 +44,6 @@ ok('人在西陆：幽墟根本不在过界清单里出现可去的样子', awai
   const t=crossTargets().find(x=>x.key==='幽墟');
   return !!t && t.ok===false && t.why.includes('得先到轮枢');
 }));
-ok('过界弹窗里写明了幽墟怎么下去怎么上来', await page.evaluate(()=>{
-  openCross(); const t=document.querySelector('.gaterule').textContent; $('crossMask').classList.remove('on');
-  return t.includes('引荐状')&&t.includes('下来那一趟的两倍')&&t.includes('幽墟不可投胎');
-}));
 
 console.log('\n【先到轮枢】');
 await page.evaluate(()=>{ S.player.money=6000; S.gateOpen=true; });
@@ -81,6 +77,17 @@ ok('求引荐要花钱，成了就落一张引荐状', await page.evaluate(()=>{
   return S.player.money<before && !!abyssPass() && S.ledger.some(x=>/求得引荐状/.test(x));
 }));
 ok('有了引荐状就不必翻倍', await page.evaluate(()=>crossCost('幽墟')===360));
+
+ok('幽墟的规矩要点了它才说，不提前灌', await page.evaluate(()=>{
+  openCross();
+  const before=!!document.querySelector('.crossask');
+  const el=Array.from(document.querySelectorAll('#crossList .crossopt')).find(x=>x.dataset.k==='幽墟');
+  if(el) el.click();
+  const ask=document.querySelector('.crossask');
+  const t=ask?ask.textContent:'';
+  $('crossMask').classList.remove('on');
+  return before===false&&!!ask&&t.includes('每三个月磨你一次')&&t.includes('两倍')&&!!document.getElementById('askGo');
+}));
 
 console.log('\n【下去】');
 await page.evaluate(()=>crossRealm('幽墟'));

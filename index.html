@@ -179,6 +179,11 @@ body{
 .gatebox{font-size:13px;line-height:1.9}
 .gatebox b{color:var(--accent)}
 .gaterow{display:flex;align-items:center;gap:8px;margin-top:6px}
+.lore p{margin:0 0 9px;line-height:1.95;font-size:13.5px;color:var(--ink-soft)}
+.lore p:last-child{margin-bottom:0}
+.lore b{color:var(--ink);font-weight:600}
+#loreCard h3{cursor:pointer;user-select:none}
+#loreCard h3 .lotog{margin-left:auto;font-size:12px;color:var(--ink-faint);letter-spacing:0;font-weight:400}
 .ochk{display:flex;gap:9px;align-items:flex-start;padding:7px 2px;border-bottom:1px dashed var(--paper-edge);font-size:13.5px}
 .ochk:last-of-type{border-bottom:none}
 .ochk .obox{color:var(--ink-faint);font-size:15px;line-height:1.35;flex:0 0 auto}
@@ -199,6 +204,9 @@ body{
 .gaterule i{font-style:normal;font-weight:700;color:var(--ink)}
 .gaterule p b{display:inline;color:var(--ink);letter-spacing:0;font-size:12.5px}
 .gaterule .gw{color:var(--ink-faint);margin-top:8px;border-top:1px dashed var(--paper-edge);padding-top:6px}
+.crossask{margin:6px 0 2px;padding:9px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--card-bg);font-size:13px;line-height:1.85;color:var(--ink-soft)}
+.crossask b{color:var(--ink)}
+.crossask .askrow{display:flex;gap:8px;margin-top:8px}
 .crossopt{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--paper-edge);
   border-radius:8px;background:var(--paper);cursor:pointer}
 .crossopt.off{opacity:.5;cursor:not-allowed}
@@ -548,6 +556,7 @@ body{
       <div class="card"><h3>❈ 人物名录 <small>点击可交谈、切磋</small></h3><div id="npcList"></div></div>
     </div>
     <div class="tabpane" id="tab-world">
+      <div class="card" id="loreCard"><h3>❈ 万界 <small>你活在个什么地方</small><span class="lotog" id="loreTog"></span></h3><div id="loreBody" class="lore"></div></div>
       <div class="card"><h3>❈ 界门 <small>命运之轮转到哪儿了</small></h3><div id="wGate"></div></div>
       <div class="card"><h3>❈ 宿命 <small>你此生要追的事</small></h3><div id="wQuests"></div></div>
       <div class="card" id="outerCard" style="display:none"><h3>☠ 轮外之物 <small id="outerSub"></small></h3><div id="outerList"></div></div>
@@ -612,7 +621,6 @@ body{
       <div class="seg" id="crFree">
         <button data-v="free">随心所欲<small style="display:block;font-size:10px;letter-spacing:0">主角光环·想干啥干啥</small></button><button data-v="mid" class="sel">万界传奇<small style="display:block;font-size:10px;letter-spacing:0">有规矩也有奇遇</small></button><button data-v="strict">写实万界<small style="display:block;font-size:10px;letter-spacing:0">处处较真·寸步难行</small></button>
       </div>
-      <div class="note" id="crFreeNote"></div>
       <details id="crFdWrap" style="margin-top:8px">
         <summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);letter-spacing:1px">细调四项 —— 不动就按上面那一档来</summary>
         <div id="crFdGrid" style="margin-top:8px"></div>
@@ -635,7 +643,7 @@ body{
 <div class="modal-mask" id="goalMask">
   <div class="modal">
     <h2>宿 命</h2>
-    <div class="sub">这是你此生要追的事。模型推出来的宿命就是主线，引擎只管记账</div>
+    <div class="sub">你此生要追的事</div>
     <div id="goalList"></div>
     <div class="mbtnrow"><button class="mbtn primary" id="goalClose">合上</button></div>
   </div>
@@ -647,21 +655,8 @@ body{
     <h2>过 界</h2>
     <div class="sub" id="crossSub"></div>
     <div class="gaterule">
-      <b>过去干嘛</b>
-      <p><i>轮枢</i>——五界唯一常年通着的城。冒险者公会在这儿发委托（F 到 S 级），万界商盟卖别界的货，命运神殿替人问命、也在这儿出万界榜。它是跳板：到了轮枢，随时可以再转去任一界。</p>
-      <p><i>别的界</i>——换一套修行的路子、换一批人、换一张脸。你在东荒练的是灵气，到了西陆就是外行；但你身上东荒的东西，在那边是稀罕物。跨界的仇家、跨界的买卖、榜上别界的高手，都得过去才够得着。</p>
-      <b>怎么过去</b>
-      <p><i>时机</i>——轮枢<b>常年可去</b>，从轮枢也随时能转去任一界。东荒、西陆、樱洲之间的<b>直达</b>界门，只在命运之轮转动的那两个月开；错过了不必干等，走轮枢中转就是，代价是两趟盘缠和一两个月路程。</p>
-      <p><i>轮转还管什么</i>——界门大开那两个月，异界来客涌进来、幽墟也会漏出东西、榜上别界的高手才好找上门。所以轮转仍然值得等，只是不再是唯一的路。</p>
-      <p><i>门路</i>——要盘缠，也要路子。身上有通行证、引荐信、路引一类的东西，用掉一件就能走；没有就只能雇走私客的船，<b>价钱翻倍</b>。</p>
-      <b>过去之后</b>
-      <p>你是异界人：修的仍是出生界那一套，境界的叫法到哪儿都不变，但在别界修行<b>只剩五成</b>（满一年松到七成，拜了本地的势力再松一点），月耗也高。原来的师门隔着界，<b>例银领不到、食宿也蹭不上</b>。原界的旧识、仇家、门派都还在，回去就接得上；<b>仇家不会因为隔着界就算了</b>——恨得够深，他自己凑盘缠也会追过来。</p>
-      <b>幽墟</b>
-      <p><i>怎么下去</i>——只有轮枢那一道门，且只在轮转开门那两个月松动。要么先在命运神殿求一张引荐状，要么雇走私客；<b>价钱是常规过界的三倍</b>，没引荐再翻一倍。</p>
-      <p><i>里头什么样</i>——没有日月，天底是一片不动的暗红。天命骰每回合 <b>−3</b>，做什么都难上一档，受伤也更重；就算开着随心所欲，在幽墟一样会受重伤（但仍不会死）。修行只剩四成，开销高六成半。<b>每连着待满三个月要过一次侵蚀判定</b>——败了不是落一条终身旧伤，就是性情被磨掉一块。</p>
-      <p><i>下去图什么</i>——幽墟的器物加成高出一档，代价是每月耗气血或涨恶名；别处问不到的消息在这儿问得到；还有一件事，只有在这儿才了结得了。</p>
-      <p><i>怎么上来</i>——赶上开门就照常价走人；等不及就雇走私客，<b>价钱是下来那一趟的两倍</b>。</p>
-      <p class="gw">幽墟不可投胎。轮上那一辐是锁死的，只能去，不能生在那儿。</p>
+      <p>轮枢常年通着；东荒、西陆、樱洲之间只有轮转开门那两个月直达。</p>
+      <p>不赶轮转也能走——先去轮枢，再转过去，代价是两趟盘缠。</p>
     </div>
     <div id="crossList"></div>
     <div class="note" id="crossNote"></div>
@@ -673,7 +668,7 @@ body{
 <div class="modal-mask" id="saveMask">
   <div class="modal">
     <h2>存档阁</h2>
-    <div class="sub">当前进度会自动保存；下面三个存档位供你手动留底，另可导出成书</div>
+    <div class="sub">进度自动存。下面三个位子供你手动留底。</div>
     <div id="slotList"></div>
     <div class="field" style="margin-top:10px">
       <div class="mbtnrow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -704,7 +699,7 @@ body{
     <div class="field">
       <label>模型名</label>
       <input id="cfgModel" placeholder="deepseek-v4-flash">
-      <div class="note">推荐 deepseek-v4-flash（快且便宜）；追求更强剧情可填 deepseek-v4-pro（较慢较贵）。旧模型名 deepseek-chat / deepseek-reasoner 已停用</div>
+      <div class="note">推荐 deepseek-v4-flash（快且便宜）</div>
     </div>
     <div class="field">
       <label>思考模式（仅 DeepSeek V4 生效）</label>
@@ -722,7 +717,6 @@ body{
         <option value="custom">自定 —— 下面四项各调各的</option>
       </select>
       <div id="cfgFdGrid" style="margin-top:8px"></div>
-      <div class="note" id="cfgFreeNote"></div>
     </div>
     <div class="field" id="cfgMemWrap">
       <label>记忆长度（本局，随时可改）</label>
@@ -735,7 +729,7 @@ body{
     <div class="field">
       <label>连通性</label>
       <button class="mbtn" id="cfgTest" style="width:100%">⚡ 测一下这三项通不通</button>
-      <div class="note" id="cfgTestMsg">拿上面填的三项真发一次最小请求，不动已存的设置</div>
+      <div class="note" id="cfgTestMsg">真发一次请求试试，不动已存的设置</div>
     </div>
     <div class="mbtnrow">
       <button class="mbtn" id="cfgCancel">关闭</button>
@@ -824,7 +818,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=13;
+const SAVE_VERSION=14;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -834,7 +828,7 @@ function newStateShell(){
     months:0, ganzhi:0, upkeepLast:0, destitute:false, starveMonths:0, oldAgeDeath:false,
     abyssSince:null, abyssRolls:0, abyssPaid:0, abyssFreed:false,
     vendettas:[], scars:[], ailments:[], engineNews:[], ranked:false, lastChallengeMonth:-99, volumes:[], ledger:[],
-    memLong:true,
+    memLong:true, loreSeen:0,
     sect:null,
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0}, forged:[],
     ties:{'东荒-西陆':50,'东荒-樱洲':50,'西陆-樱洲':50}, voidP:20, lords:{}, lordSince:null, lordPolicy:null,
@@ -973,6 +967,7 @@ function migrate(s){
     if(s.outerCool==null) s.outerCool=0;
     s.v=13;
   }
+  if(s.v<14){ if(s.loreSeen==null) s.loreSeen=0; s.v=14; }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
   return s;
@@ -5140,29 +5135,26 @@ function renderGate(){
   lines.push(S.gateOpen
     ? `界门<b>开着</b>，还有 ${Math.max(0,num(S.gateCloseAt)-num(S.months))} 个月合上`
     : `界门未开，约 <b>${gateLeft()}</b> 个月后轮转${gateLeft()<=3?'（风声已经起了）':''}`);
-  lines.push(`已轮转 ${num(S.wheelTurns)} 次`);
-  // 三界界主
+  // 三界界主：一行摆完
   const lord=TIE_REALMS.map(R=>{
     const l=(S.lords||{})[R];
-    if(!l) return `${JIE[R].sigil}${R}：不详`;
-    if(l.rumor) return `${JIE[R].sigil}${R}：${esc(l.name)}<span style="color:var(--ink-faint)">（传闻）</span>`;
-    if(l.isPlayer) return `${JIE[R].sigil}${R}：<b style="color:var(--accent)">你</b>`;
-    return `${JIE[R].sigil}${R}：${esc(l.name)}`;
-  }).join('<br>　　　');
-  const ties=Object.keys(S.ties||{}).map(k=>`${k.replace('-','—')} <b>${Math.round(num(S.ties[k]))}</b>（${tieLabel(S.ties[k])}）`).join('<br>　　　');
+    if(!l) return `${JIE[R].sigil}不详`;
+    if(l.isPlayer) return `${JIE[R].sigil}<b style="color:var(--accent)">你</b>`;
+    if(l.rumor) return `${JIE[R].sigil}${esc(l.name)}<span style="color:var(--ink-faint)">（传闻）</span>`;
+    return `${JIE[R].sigil}${esc(l.name)}`;
+  }).join('　');
+  const ties=Object.keys(S.ties||{}).map(k=>
+    `<b title="${esc(k.replace('-','—'))}：${tieLabel(S.ties[k])}">${Math.round(num(S.ties[k]))}</b>`).join(' · ');
   const wars=warPairs().map(p=>p.join('—')).join('、');
-  lines.push(`<span style="color:var(--ink-faint)">──────</span>`);
   lines.push(`界主　${lord}`);
-  lines.push(`幽墟压力 <b>${Math.round(voidP())}</b>（${voidLabel(voidP())}）`);
-  lines.push(`界势　${ties}`);
-  if(wars) lines.push(`<span style="color:var(--accent)">开门时会打起来：${esc(wars)}</span>`);
+  lines.push(`幽墟压力 <b>${Math.round(voidP())}</b>（${voidLabel(voidP())}）　界势 ${ties}${wars?`<span style="color:var(--accent)">　开门要打：${esc(wars)}</span>`:''}`);
   const mine=myLordRealm();
   if(mine){
     const l=S.lords[mine];
-    lines.push(`你是<b style="color:var(--accent)">${mine}界主</b>，分 ${l.score}（第二名 ${l.second}）；坐了 ${Math.max(0,num(S.months)-num(S.lordSince||S.months))} 个月`);
+    lines.push(`你是<b style="color:var(--accent)">${mine}界主</b>，分 ${l.score}（第二名 ${l.second}），坐了 ${Math.max(0,num(S.months)-num(S.lordSince||S.months))} 个月`);
   }else{
     const R=playerLordRealm(), l=(S.lords||{})[R];
-    if(l&&!l.rumor) lines.push(`你在${R}的界主分 ${playerLordScore()}${R!==S.homeRealm?'（异界之身，已打六折）':''}，当今那位 ${l.score}`);
+    if(l&&!l.rumor) lines.push(`你在${R}的界主分 ${playerLordScore()}${R!==S.homeRealm?'（异界之身已打六折）':''}，当今那位 ${l.score}`);
   }
   // 界主在开门那两个月要定本界的方针
   let policy='';
@@ -5205,17 +5197,25 @@ function setLordPolicy(p){
   }
   renderWorld(); saveGame();
 }
-function openCross(){
-  if(!S||S.over) return;
+let crossAsk=null;                       // 正在问「真要下幽墟？」
+function renderCrossList(){
+  if(!S) return;
   const list=crossTargets();
-  $('crossSub').textContent=`如今人在${jieName()}。轮枢常年通着，别的界只有轮转开门时才直达——不赶轮转也能走，先去轮枢，再从轮枢转过去。`;
   const free=fdm().freeAct, pass=passItem();
+  const cost=t=>free?t.cost:((t.key==='幽墟'?abyssPass():pass)?t.cost:t.cost*2);
   $('crossList').innerHTML=list.map(t=>{
-    const c=free?t.cost:(pass?t.cost:t.cost*2);
-    return `<div class="crossopt ${t.ok?'':'off'}" data-k="${esc(t.key)}">
+    const row=`<div class="crossopt ${t.ok?'':'off'}" data-k="${esc(t.key)}">
       <span class="cs">${t.sigil}</span>
       <span class="cn"><b>${esc(t.name)}</b><small>${esc(t.ok?t.one:t.why)}</small></span>
-      <span class="cc">${t.ok?c+' 两':'—'}</span></div>`;
+      <span class="cc">${t.ok?cost(t)+' 两':'—'}</span></div>`;
+    // 规则不提前灌，要下去的那一刻才说（规范 v2.1 第 2.2 条）
+    if(crossAsk!==t.key) return row;
+    return row+`<div class="crossask">
+      <p>下去要 <b>${cost(t)} 两</b>${(!free&&!abyssPass())?'（没有神殿的引荐，已经翻了倍）':''}。</p>
+      <p>里头没有日月，做什么都难上一档，受伤更重，<b>每三个月磨你一次</b>。</p>
+      <p>上来：赶上开门照常价，等不及雇走私客，两倍。</p>
+      <div class="askrow"><button class="mbtn primary" id="askGo" style="flex:1">下去</button><button class="mbtn" id="askNo" style="flex:1">算了</button></div>
+    </div>`;
   }).join('')||'<div class="empty">眼下哪儿也去不了</div>';
   $('crossNote').textContent = free?'随心所欲：过界不查门路，盘缠也只要个零头。'
     :(pass?`你身上有《${pass.it.name}》，过界用得上（用掉一次）。`
@@ -5223,9 +5223,49 @@ function openCross(){
   $('crossList').querySelectorAll('.crossopt').forEach(el=>el.onclick=()=>{
     const t=list.find(x=>x.key===el.dataset.k);
     if(!t||!t.ok){ toast(t?t.why:'去不了'); return; }
+    if(t.key==='幽墟'&&crossAsk!==t.key){ crossAsk=t.key; renderCrossList(); return; }
     crossRealm(t.key);
   });
+  const go=$('askGo'); if(go) go.onclick=e=>{ e.stopPropagation(); const k=crossAsk; crossAsk=null; crossRealm(k); };
+  const no=$('askNo'); if(no) no.onclick=e=>{ e.stopPropagation(); crossAsk=null; renderCrossList(); };
+}
+function openCross(){
+  if(!S||S.over) return;
+  crossAsk=null;
+  $('crossSub').textContent=`如今人在${jieName()}。`;
+  renderCrossList();
   $('crossMask').classList.add('on');
+}
+/* 世界观卡：大白话，而且跟着你知道多少变——还没撞上的事不提前告诉你，
+   跟铁律里那句「亲眼见到之前都只是传说」一个口径。 */
+let loreOpen=null;
+function loreIsOpen(){ return loreOpen==null?!(S&&S.loreSeen):loreOpen; }
+function toggleLore(){ loreOpen=!loreIsOpen(); if(!loreOpen&&S) S.loreSeen=1; renderLore(); saveGame(); }
+function knowsHub(){ return (S&&(S.forged||[]).indexOf('轮枢')>=0)||jieName()==='轮枢'; }
+function knowsAbyss(){ return !!(S&&(voidP()>=45||num(S.abyssMonths)>0||jieName()==='幽墟')); }
+function loreParas(){
+  const home=(S&&S.homeRealm)||'东荒';
+  const out=[
+    `万界像一只轮，五根辐。你投胎那天轮转了一格，停在哪根辐上，你就生在哪一界——你生在<b>${esc(home)}</b>。`,
+    `东荒有仙有妖，修的是灵气；西陆有王国和教廷，练的是魔法与斗气；樱洲有幕府和妖怪，用的是咒力与气。三界各过各的，谁也不服谁。`,
+    `界门平时不通，每隔一两年轮转一次，开两个月。那两个月里五界之间走得通。`
+  ];
+  if(knowsHub()) out.push(`轮枢是五界中间那座城，常年通着，谁的地盘也不是。公会在这儿发委托，商盟卖别界的货，命运神殿替人问命。乱，但什么都买得到。`);
+  if(knowsAbyss()) out.push(
+    `轮底下还有个幽墟。里头是魔族的地方，没有日月。界门开的那两个月，人可以下去，那边的东西也会打上来——东荒管这叫魔劫，西陆叫魔潮，樱洲叫百鬼夜行，说的是同一件事。`,
+    `三界平时互相看不顺眼，这种时候才勉强站到一块儿。`);
+  if(S&&(hasOuterQuest()||S.outerBeaten)) out.push(
+    `幽墟底下那股东西不是本地生的。它要啃的是<b>轮本身</b>。`,
+    `轮一断，五界就再没人投胎——没有下一世了。`);
+  return out;
+}
+function renderLore(){
+  const box=$('loreCard'); if(!box||!S) return;
+  const open=loreIsOpen();
+  $('loreTog').textContent=open?'收起':'展开';
+  $('loreBody').style.display=open?'block':'none';
+  if(open) $('loreBody').innerHTML=loreParas().map(t=>`<p>${t}</p>`).join('');
+  const h=box.querySelector('h3'); if(h) h.onclick=toggleLore;
 }
 function renderOuter(){
   const box=$('outerCard'); if(!box||!S) return;
@@ -5239,7 +5279,7 @@ function renderOuter(){
   if(S.outerBeaten) html+=`<div class="note">你斩过它。轮还在转。</div>`;
   else if(outerCooling()) html+=`<div class="note">上一役伤了元气，一时半刻动不了它。</div>`;
   else if(outerReady()) html+=`<div class="gaterow"><button class="mbtn primary" id="btnOuter" style="width:100%">☠ 讨伐${esc(outerName())}</button></div>`;
-  else html+=`<div class="note">五条齐了才动得了它。最难的是末一条——想杀它，先得让三界肯一起出兵。</div>`;
+  else html+=`<div class="note">五条齐了才动得了它。</div>`;
   $('outerList').innerHTML=html;
   const b=$('btnOuter'); if(b) b.onclick=fightOuter;
 }
@@ -5281,6 +5321,7 @@ async function fightOuter(){
   rebuildStatus(); renderPanel(); renderWorld(); saveGame();
 }
 function renderWorld(){
+  renderLore();
   renderGate();
   const oq=(S.quests||[]).find(x=>x.kind==='outer');
   if(oq&&oq.status==='进行中') oq.progress=outerProgress();
@@ -5600,25 +5641,6 @@ function renderBgGrid(){
     el.classList.add('sel'); crSel.bg=bgList()[+el.dataset.i][0];
   });
 }
-function freedomNote(k){
-  const f=FREEDOM[k]||FREEDOM.mid;
-  return f.hint+'　·　'+fdParts(f).join('，');
-}
-// 四组调完之后，实际是什么数——比重复念一遍四个档名有用
-function fdNumNote(){ return fdParts(fdm()).join('，'); }
-function fdParts(f){
-  const parts=[];
-  parts.push(f.check?`判定气运 +${f.check}`:'判定无加成');
-  parts.push(`修炼涨得 ${f.growth===1?'正常':'快 '+f.growth+' 倍'}`);
-  parts.push(`月耗 ×${f.upkeep}`);
-  parts.push(f.injury?`会落终身伤残（概率 ×${f.injury}）`:'不会落终身伤残');
-  parts.push(f.kill?(f.kill<1?`比武丧命概率 ×${f.kill}`:'比武真会死'):'比武不会丧命');
-  parts.push(f.aging?(f.aging<1?'衰老减半':'会衰老会老死'):'不衰老不老死');
-  parts.push(`修为上限 ${f.wcap||100}`);
-  parts.push(f.lifeGift?`奇遇可延寿（单次 +${f.lifeGift}，最高 ${f.lifeCap}）`:'寿元不可增');
-  parts.push('轮转周期'+(f.freeAct?'减半·换界不查门路':'照常'));
-  return parts;
-}
 function fdGridHtml(prefix, vals){
   return FD_GROUPS.map(g=>`<div class="fdrow"><label>${g[1]}<small>${g[2]}</small></label>`
     +`<select data-g="${g[0]}" id="${prefix}_${g[0]}">`
@@ -5633,7 +5655,7 @@ function openCreate(){
     crWired=true;
     $('crGender').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crGender').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.gender=b.dataset.v; crSel.avatar=null; renderAvatarPick(); });
     $('crDiff').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crDiff').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.difficulty=b.dataset.v; });
-    $('crFree').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crFree').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.freedom=b.dataset.v; for(const [g] of FD_GROUPS) crSel.fd[g]=crSel.freedom; renderCrFd(); $('crFreeNote').textContent=freedomNote(crSel.freedom); });
+    $('crFree').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crFree').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.freedom=b.dataset.v; for(const [g] of FD_GROUPS) crSel.fd[g]=crSel.freedom; renderCrFd();  });
     $('crSpin').onclick=spinWheel;
   }
   const wi=$('wheelImg'); if(wi&&!wi.src) wi.src=WHEEL_IMG;
@@ -5641,7 +5663,7 @@ function openCreate(){
   pickRealm(crSel.realm);
   $('crCancel').style.display=S?'block':'none';
   renderCrFd();
-  $('crFreeNote').textContent=freedomNote(crSel.freedom);
+  
   $('createMask').classList.add('on');
 }
 $('crCancel').onclick=()=>{ $('createMask').classList.remove('on'); applyRealmTheme(); };
@@ -6273,9 +6295,9 @@ function openSettings(){
   $('cfgThink').value=cfg.think?'on':'off';
   $('cfgFreeWrap').style.display=S?'block':'none';
   $('cfgMemWrap').style.display=S?'block':'none';
-  if(S){ renderCfgFd(); $('cfgFreedom').value=(fdm().label==='自定')?'custom':(S.freedom||'mid'); $('cfgFreeNote').textContent=fdNumNote();
+  if(S){ renderCfgFd(); $('cfgFreedom').value=(fdm().label==='自定')?'custom':(S.freedom||'mid'); 
          $('cfgMem').value=S.memLong===false?'short':'long'; $('cfgMemNote').textContent=memNote(); }
-  cfgMsg(cfg.key?'拿上面填的三项真发一次最小请求，不动已存的设置':'还没填 key。填好再点上面那个按钮试一下。');
+  cfgMsg(cfg.key?'真发一次请求试试，不动已存的设置':'还没填 key。填好再点上面那个按钮试一下。');
   $('cfgCancel').textContent=cfg.key?'关闭':'（没 key 关不掉）';
   $('settingsMask').classList.add('on');
 }
@@ -6295,7 +6317,7 @@ function afterFreedomChange(){
     S.player.status=S.player.status.filter(t=>t!=='饥寒交迫');
     S.destitute=false; S.oldAgeDeath=false;
   }
-  $('cfgFreeNote').textContent=fdNumNote();
+  
   renderPanel(); saveGame();
   toast('自由度已改：'+fdm().label+'，下一回合起生效');
 }
