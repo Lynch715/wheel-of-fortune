@@ -36,57 +36,99 @@ for n in scs:
 
 # ---- 转轮 / 封面 / 图标 ----
 # ---- 转轮：归一化 + 量徽记角度 ----
-# 出图的轮在画布里不居中（圆心 y 偏上），五个徽记也不是严格等分，
-# 直接用就会「指针对不上」。这里先把圆心摆正、裁成正方形，再转到东荒＝正上方，
-# 最后把量到的角度写进 WHEEL_ANGLE，代码按这张表定位和分扇区。
+# 出图的轮圆心不在画布中心，五枚徽牌也不是严格等分（最大差 2.4 度）。
+# 这里量出五枚徽牌内盘的重心，用最小二乘拟一个正五边形，拿到圆心、半径和相位，
+# 按相位转正、按圆心裁方。转正之后五辐就按 0/72/144/216/288 走整数格，
+# 每停一格轮子的姿态一模一样；徽牌自身那点偏差是画出来的，转多少都去不掉。
 import math
 def wheel_normalize():
     src=Image.open(f'{A}/wheel.png').convert('RGBA'); W,H=src.size; px=src.load()
-    xs=[];ys=[]
-    for y in range(0,H,3):
-        for x in range(0,W,3):
-            if px[x,y][3]>40: xs.append(x);ys.append(y)
-    cx=(min(xs)+max(xs))/2; cy=(min(ys)+max(ys))/2
-    R=max(max(xs)-min(xs),max(ys)-min(ys))/2
+    ST=2; N=W//ST                                   # 隔一格取一个点，别缩图——缩图会把金线糊进盘面
     def is_gold(q):
         r,g,b,al=q
-        return al>150 and r>110 and g>80 and b<r-35
-    names=['东荒','樱洲','幽墟','轮枢','西陆']     # 照图上顺时针的实际排布
-    def medallions(cx,cy,R):
-        pts=[]
-        for i in range(5):
-            th=math.radians(i*72-90); rr=0.72*R
-            ux,uy=cx+rr*math.cos(th), cy+rr*math.sin(th)
-            for _ in range(4):                      # 往金环的重心收敛
-                sx=sy=n=0; win=int(0.19*R)
-                for y in range(int(uy-win),int(uy+win)):
-                    for x in range(int(ux-win),int(ux+win)):
-                        if 0<=x<W and 0<=y<H and math.hypot(x-ux,y-uy)<win and is_gold(px[x,y]):
-                            sx+=x; sy+=y; n+=1
-                if n: ux,uy=sx/n,sy/n
-            pts.append((ux,uy))
-        return pts
-    # 圆心改用五枚徽牌的重心：外框会被轮箍上支出的尖角和裁切带偏，徽牌不会
-    pts=medallions(cx,cy,R)
-    for _ in range(2):
-        cx=sum(p[0] for p in pts)/5; cy=sum(p[1] for p in pts)/5
-        R=(sum(math.hypot(p[0]-cx,p[1]-cy) for p in pts)/5)/0.72
-        pts=medallions(cx,cy,R)
+        return al>128 and r>90 and r-b>40 and g-b>15 and r>=g
+    xs=[];ys=[]
+    for y in range(N):
+        for x in range(N):
+            if px[x*ST,y*ST][3]>40: xs.append(x);ys.append(y)
+    bx=(min(xs)+max(xs))/2; by=(min(ys)+max(ys))/2  # 外框只用来筛半径，不当圆心
+    bR=max(max(xs)-min(xs),max(ys)-min(ys))/2
+    # 徽牌内盘＝不透明、不是金色的连通块。轮箍上的石嵌也是这个颜色，
+    # 但它是细长的弧，按外接框的填充率就能分开（弧 0.1 上下，圆盘 0.4 以上）。
+    mask=[[(px[x*ST,y*ST][3]>128 and not is_gold(px[x*ST,y*ST])) for x in range(N)] for y in range(N)]
+    seen=[[False]*N for _ in range(N)]
+    blobs=[]
+    for y0 in range(N):
+        for x0 in range(N):
+            if not mask[y0][x0] or seen[y0][x0]: continue
+            st=[(x0,y0)]; seen[y0][x0]=True; sx=sy=n=0; x1=x2=x0; y1=y2=y0
+            while st:
+                x,y=st.pop(); sx+=x; sy+=y; n+=1
+                if x<x1:x1=x
+                if x>x2:x2=x
+                if y<y1:y1=y
+                if y>y2:y2=y
+                for dx,dy in ((1,0),(-1,0),(0,1),(0,-1)):
+                    u,v=x+dx,y+dy
+                    if 0<=u<N and 0<=v<N and mask[v][u] and not seen[v][u]:
+                        seen[v][u]=True; st.append((u,v))
+            if n<60: continue
+            w=x2-x1+1; h=y2-y1+1
+            if not(0.8<w/h<1.25) or n/(w*h)<0.30: continue
+            rr=math.hypot(sx/n-bx,sy/n-by)/bR
+            if not(0.5<rr<0.85): continue            # 正中那颗紫晶在 0.07，出局
+            blobs.append((n,sx/n,sy/n))
+    # 一枚徽牌常被盘面上的金线切成几块，先按位置并回去，再取最大的五团
+    blobs.sort(reverse=True)
+    cl=[]
+    for n,x,y in blobs:
+        for c in cl:
+            if math.hypot(x-c[1]/c[0], y-c[2]/c[0])<0.10*bR:
+                c[0]+=n; c[1]+=x*n; c[2]+=y*n; break
+        else: cl.append([n,x*n,y*n])
+    cl.sort(key=lambda c:-c[0])
+    if len(cl)<5: raise SystemExit('转轮：只认出 %d 枚徽牌，换图了就得回来看这段'%len(cl))
+    pts=[(c[1]/c[0]*ST, c[2]/c[0]*ST) for c in cl[:5]]
+    # 最小二乘拟正五边形：圆心用局部搜索，相位／半径对给定圆心有闭式解
+    def fit(cx,cy):
+        q=sorted(pts,key=lambda p:(math.degrees(math.atan2(p[0]-cx,-(p[1]-cy))))%360)
+        ang=[(math.degrees(math.atan2(x-cx,-(y-cy))))%360 for x,y in q]
+        k=min(range(5),key=lambda i:abs((ang[i]+180)%360-180))   # 从最接近正上方那枚起
+        q=q[k:]+q[:k]; ang=ang[k:]+ang[:k]
+        sn=sum(math.sin(math.radians(ang[i]-i*72)) for i in range(5))
+        cs=sum(math.cos(math.radians(ang[i]-i*72)) for i in range(5))
+        phi=math.degrees(math.atan2(sn,cs))
+        R=sum(math.hypot(x-cx,y-cy) for x,y in q)/5
+        e=0
+        for i,(x,y) in enumerate(q):
+            th=math.radians(phi+i*72)
+            e+=(x-(cx+R*math.sin(th)))**2+(y-(cy-R*math.cos(th)))**2
+        return e,phi,R,ang
     cx=sum(p[0] for p in pts)/5; cy=sum(p[1] for p in pts)/5
-    ang={nm:(math.degrees(math.atan2(p[0]-cx,-(p[1]-cy)))+360)%360 for nm,p in zip(names,pts)}
-    # 外沿半径按真正量到的最远不透明像素算，裁出来才不会缺角
+    best=fit(cx,cy)[0]
+    step=8.0
+    while step>0.05:
+        moved=False
+        for dx,dy in ((step,0),(-step,0),(0,step),(0,-step)):
+            e=fit(cx+dx,cy+dy)[0]
+            if e<best: best,cx,cy=e,cx+dx,cy+dy; moved=True; break
+        if not moved: step/=2
+    e,phi,R,ang=fit(cx,cy)
+    names=['东荒','樱洲','幽墟','轮枢','西陆']          # 照图上顺时针的实际排布
+    dev=[round(((ang[i]-phi-i*72)+540)%360-180,2) for i in range(5)]
+    print('转轮 圆心 %.1f,%.1f  半径 %.1f  相位 %.2f  徽牌偏差 %s  残差 %.1f px'
+          %(cx,cy,R,phi,dev,math.sqrt(e/5)))
     far=0
+    px=src.load()
     for y in range(0,H,2):
         for x in range(0,W,2):
             if px[x,y][3]>40:
                 d=math.hypot(x-cx,y-cy)
                 if d>far: far=d
-    off=ang['东荒']                                  # 转到东荒正上方
-    pad=int(far*1.02)
+    pad=int(far*1.03)
     box=src.crop((int(cx-pad),int(cy-pad),int(cx+pad),int(cy+pad)))
-    box=box.rotate(off, resample=Image.BICUBIC, expand=False)   # 正角度＝逆时针
-    ang={k:round((v-off)%360,1) for k,v in ang.items()}
-    return box, ang
+    box=box.rotate(phi, resample=Image.BICUBIC, expand=False)   # 正角度＝逆时针
+    return box, {nm:i*72 for i,nm in enumerate(names)}
 wheel_img, WHEEL_ANGLE = wheel_normalize()
 b=io.BytesIO(); wheel_img.resize((512,512),Image.LANCZOS).save(b,'WEBP',quality=80,method=6)
 WHEEL=b64(b.getvalue())

@@ -38,6 +38,17 @@ await page.click('#crSpin'); await page.waitForTimeout(3000);
 ok('转轮后停在可投胎的一辐', /东荒|西陆|樱洲/.test(await page.textContent('#wheelPick')));
 await page.click('#wheelSvg .spoke[data-k="东荒"]'); await page.waitForTimeout(200);
 ok('点回东荒', (await page.textContent('#wheelPick')).includes('东荒'));
+// 轮的花纹是五折对称的，只有按整 72 度停才不会歪。build.py 出图时已经转正，
+// 这里守住：哪天量出来不是整数，就是换图没重新归一化。
+const WA=await page.evaluate(()=>WHEEL_ANGLE);
+ok('五辐按整 72 度分 '+JSON.stringify(WA), ['东荒','樱洲','幽墟','轮枢','西陆'].every((k,i)=>WA[k]===i*72));
+// 停在哪一辐，转的角度就该是 -72 的整数倍（加上整圈）
+await page.click('#wheelSvg .spoke[data-k="西陆"]'); await page.waitForTimeout(200);
+const tf=await page.evaluate(()=>getComputedStyle(document.getElementById('wheelSpin')).transform);
+const mm=tf.match(/matrix\(([-\d.]+), *([-\d.]+)/);
+const degNow=mm ? (Math.round(Math.atan2(+mm[2],+mm[1])*180/Math.PI)+360)%360 : -1;
+ok('停在西陆时轮正好转了 72 的整数倍（实转 '+degNow+' 度）', degNow%72===0);
+await page.click('#wheelSvg .spoke[data-k="东荒"]'); await page.waitForTimeout(200);
 const bgn=(await page.$$('#bgGrid .bgopt')).length;
 ok('出身背景是东荒的一套（'+bgn+'项）', bgn>=16 && (await page.textContent('#bgGrid')).includes('修真世家'));
 
