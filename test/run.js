@@ -42,7 +42,7 @@ for(const birth of BIRTH){
     try{
       await page.goto('http://localhost:8937/');
       await page.waitForTimeout(400);
-      await page.click(`#wheelSvg .spoke[data-k="${birth}"]`);
+      await page.click(`#jieGrid .jiebtn[data-k="${birth}"]`);
       await page.waitForTimeout(150);
       const fd={act:pick(FREE),peril:pick(FREE),grow:pick(FREE),boon:pick(FREE)};
       await page.evaluate(([d,f])=>{ crSel.difficulty=d; crSel.fd=f; }, [pick(DIFF),fd]);

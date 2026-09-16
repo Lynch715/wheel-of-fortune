@@ -30,20 +30,19 @@ ok('封面画在样张顶上', await page.evaluate(()=>{const i=document.querySe
 ok('图标已换成美术出的那张', await page.evaluate(()=>($('appIcon').href||'').indexOf('data:image/png')===0));
 await page.reload(); await page.waitForTimeout(400);
 
-console.log('\n【转轮】');
-ok('转轮用的是美术那张图', await page.evaluate(()=>{const i=$('wheelImg');return !!i&&i.naturalWidth>=400;}));
-ok('五个扇形还在（当点击区）', (await page.$$('#wheelSvg .spoke')).length===5);
-ok('图例五个，两个锁着', (await page.$$('#wheelLegend .wleg')).length===5 && (await page.$$('#wheelLegend .wleg.off')).length===2);
-ok('角度表是从图上量出来的（东荒正上方，五个各不相同且顺时针递增）', await page.evaluate(()=>{
-  const a=WHEEL_ANGLE; const v=['东荒','樱洲','幽墟','轮枢','西陆'].map(k=>a[k]);
-  return a['东荒']===0 && v.every((x,i)=>i===0||x>v[i-1]) && v[4]<360 && new Set(v).size===5;
-}));
-ok('轮上不再糊遮罩（扇形只当点击区）', await page.evaluate(()=>
-  Array.from(document.querySelectorAll('#wheelSvg .spoke')).every(p=>p.getAttribute('fill-opacity')==='0')));
-await page.click('#wheelLegend .wleg[data-k="樱洲"]'); await page.waitForTimeout(200);
-ok('点图例能选界', (await page.textContent('#wheelPick')).includes('樱洲'));
-ok('选了樱洲，轮就转到那个角度', await page.evaluate(()=>$('wheelSpin').style.transform.includes('rotate(-'+WHEEL_ANGLE['樱洲'])));
-await page.click('#wheelLegend .wleg[data-k="东荒"]'); await page.waitForTimeout(250);
+console.log('\n【选界】');
+ok('五个界的按钮都在', (await page.$$('#jieGrid .jiebtn')).length===5);
+ok('两个锁着', (await page.$$('#jieGrid .jiebtn.off')).length===2);
+ok('每个按钮都带徽记和一句话', await page.evaluate(()=>
+  Array.from(document.querySelectorAll('#jieGrid .jiebtn')).every(b=>
+    b.querySelector('.js').textContent.trim() && b.querySelector('.jn small').textContent.trim())));
+await page.click('#jieGrid .jiebtn[data-k="樱洲"]'); await page.waitForTimeout(200);
+ok('点按钮能选界', (await page.textContent('#jieGrid .jiebtn.sel')).includes('樱洲'));
+ok('选了樱洲，界景换成樱洲那张', await page.evaluate(()=>
+  $('jieShot').style.backgroundImage.indexOf(JIE_IMG['樱洲'].slice(0,64))>0));
+ok('五界界景都在', await page.evaluate(()=>
+  ['东荒','西陆','樱洲','轮枢','幽墟'].every(k=>JIE_IMG[k])));
+await page.click('#jieGrid .jiebtn[data-k="东荒"]'); await page.waitForTimeout(250);
 
 console.log('\n【捏人挑相貌】');
 ok('相貌可挑，摆的是东荒的脸', await page.evaluate(()=>{
@@ -61,7 +60,7 @@ ok('挑的脸会带进开局提示词（连年纪一档）', await page.evaluate
   return p.includes('相貌已由玩家选定')&&p.includes(avDesc(a))&&p.includes('岁之间');
 }, picked));
 await page.click('#crGender button[data-v="随机"]'); await page.waitForTimeout(150);
-await page.click('#wheelLegend .wleg[data-k="东荒"]'); await page.waitForTimeout(250);
+await page.click('#jieGrid .jiebtn[data-k="东荒"]'); await page.waitForTimeout(250);
 await page.click('#crStart');
 await page.waitForSelector('#choices .opt',{timeout:25000});
 
@@ -139,7 +138,7 @@ await page.setViewportSize({width:1400,height:900}); await page.waitForTimeout(2
 await page.screenshot({path:path.join(__dirname,'s4-desk.png')});
 await page.evaluate(()=>{ localStorage.removeItem('wanjie_save_v1'); });
 await page.evaluate(()=>{ S=null; openCreate(); document.querySelector('#createMask .modal').scrollTop=0; }); await page.waitForTimeout(600);
-await page.screenshot({path:path.join(__dirname,'s4-wheel.png')});
+await page.screenshot({path:path.join(__dirname,'s4-jiepick.png')});
 
 console.log('\n通过 '+oks.length+' 项，失败 '+fails.length+' 项');
 if(errs.length) console.log('页面报错：\n'+errs.slice(0,6).join('\n'));

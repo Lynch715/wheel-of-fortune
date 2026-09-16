@@ -23,7 +23,7 @@ await page.route('**/chat/completions',async route=>{
 await page.addInitScript(()=>{ localStorage.setItem('wanjie_cfg',JSON.stringify({base:'https://api.deepseek.com',key:'sk-test',model:'m',think:false})); });
 await page.goto('http://localhost:8941/');
 await page.waitForTimeout(400);
-await page.click('#wheelSvg .spoke[data-k="东荒"]');
+await page.click('#jieGrid .jiebtn[data-k="东荒"]');
 await page.waitForTimeout(150);
 await page.click('#crStart');
 await page.waitForSelector('#choices .opt',{timeout:25000});

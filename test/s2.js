@@ -32,11 +32,11 @@ await page.addInitScript(()=>{ localStorage.setItem('wanjie_cfg',JSON.stringify(
 await page.goto('http://localhost:8933/');
 
 console.log('\n【轮上三辐可停】');
-ok('可停的辐有三个', (await page.$$('#wheelSvg .spoke:not(.locked)')).length===3);
-ok('轮枢与幽墟在图例里标着不可投胎', (await page.textContent('#wheelLegend')).includes('不可投胎') && (await page.$$('#wheelLegend .wleg.off')).length===2);
-await page.click('#wheelSvg .spoke[data-k="西陆"]');
+ok('能投胎的三个', (await page.$$('#jieGrid .jiebtn:not(.off)')).length===3);
+ok('轮枢与幽墟写明只能去不能投', (await page.textContent('#jieGrid')).includes('只能去') && (await page.$$('#jieGrid .jiebtn.off')).length===2);
+await page.click('#jieGrid .jiebtn[data-k="西陆"]');
 await page.waitForTimeout(200);
-ok('点辐可选西陆', (await page.textContent('#wheelPick')).includes('西陆'));
+ok('点了可选西陆', (await page.textContent('#jieGrid .jiebtn.sel')).includes('西陆'));
 ok('出身表换成西陆的', (await page.textContent('#bgGrid')).includes('魔法塔学徒'));
 await page.click('#crStart');
 await page.waitForSelector('#choices .opt',{timeout:25000});
@@ -207,9 +207,9 @@ ok('判定尺子三处同一套', await page.evaluate(()=>{
   return a.includes('40 容易')&&a.includes('气运加成')&&a.includes('掷 20 必成')
       && judgeBlock({fate:10,months:1}).includes('40 容易');
 }));
-ok('幽墟仍不可投胎：轮上那一辐锁着', await page.evaluate(()=>{
-  const sp=document.querySelector('#wheelSvg .spoke[data-k="幽墟"]');
-  return !!sp && sp.classList.contains('locked');
+ok('幽墟仍不可投胎：那个按钮是锁着的', await page.evaluate(()=>{
+  const sp=document.querySelector('#jieGrid .jiebtn[data-k="幽墟"]');
+  return !!sp && sp.classList.contains('off');
 }));
 ok('人不在轮枢时幽墟下不去', await page.evaluate(()=>{
   const g=S.gateOpen; S.gateOpen=true;

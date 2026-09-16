@@ -30,29 +30,29 @@ await page.addInitScript(()=>{ localStorage.setItem('wanjie_cfg',JSON.stringify(
 await page.goto('http://localhost:8932/');
 
 console.log('\n【转轮】');
-ok('轮画出五辐', (await page.$$('#wheelSvg .spoke')).length===5);
-ok('可停的辐有三个（轮枢幽墟锁着）', (await page.$$('#wheelSvg .spoke:not(.locked)')).length===3);
-ok('默认停在东荒', (await page.textContent('#wheelPick')).includes('东荒'));
-ok('顶栏界徽是☯', (await page.textContent('#jieSeal'))==='☯');
-await page.click('#crSpin'); await page.waitForTimeout(3000);
-ok('转轮后停在可投胎的一辐', /东荒|西陆|樱洲/.test(await page.textContent('#wheelPick')));
-await page.click('#wheelSvg .spoke[data-k="东荒"]'); await page.waitForTimeout(200);
-ok('点回东荒', (await page.textContent('#wheelPick')).includes('东荒'));
-// 轮的花纹是五折对称的，只有按整 72 度停才不会歪。build.py 出图时已经转正，
-// 这里守住：哪天量出来不是整数，就是换图没重新归一化。
-const WA=await page.evaluate(()=>WHEEL_ANGLE);
-ok('五辐按整 72 度分 '+JSON.stringify(WA), ['东荒','樱洲','幽墟','轮枢','西陆'].every((k,i)=>WA[k]===i*72));
-// 停在哪一辐，转的角度就该是 -72 的整数倍（加上整圈）
-await page.click('#wheelSvg .spoke[data-k="西陆"]'); await page.waitForTimeout(200);
-const tf=await page.evaluate(()=>getComputedStyle(document.getElementById('wheelSpin')).transform);
-const mm=tf.match(/matrix\(([-\d.]+), *([-\d.]+)/);
-const degNow=mm ? (Math.round(Math.atan2(+mm[2],+mm[1])*180/Math.PI)+360)%360 : -1;
-ok('停在西陆时轮正好转了 72 的整数倍（实转 '+degNow+' 度）', degNow%72===0);
-await page.click('#wheelSvg .spoke[data-k="东荒"]'); await page.waitForTimeout(200);
+ok('五个界都列出来了', (await page.$$('#jieGrid .jiebtn')).length===5);
+ok('能投胎的三个，轮枢幽墟锁着', (await page.$$('#jieGrid .jiebtn:not(.off)')).length===3);
+ok('默认选中东荒', (await page.textContent('#jieGrid .jiebtn.sel')).includes('东荒'));
+ok('锁着的两个写明了为什么', (await page.textContent('#jieGrid')).includes('只能去'));
+await page.click('#jieGrid .jiebtn[data-k="西陆"]'); await page.waitForTimeout(200);
+ok('点了西陆就换过去', (await page.textContent('#jieGrid .jiebtn.sel')).includes('西陆'));
+ok('底下的界景跟着换', await page.evaluate(()=>{
+  const el=document.getElementById('jieShot');
+  return el.classList.contains('on') && el.style.backgroundImage.indexOf('data:image')>0;
+}));
+ok('点锁着的界不生效', await page.evaluate(async()=>{
+  document.querySelector('#jieGrid .jiebtn[data-k="幽墟"]').click();
+  return crSel.realm==='西陆';
+}));
+await page.click('#jieGrid .jiebtn[data-k="东荒"]'); await page.waitForTimeout(200);
+ok('点回东荒', (await page.textContent('#jieGrid .jiebtn.sel')).includes('东荒'));
+ok('轮子那一套彻底没了', await page.evaluate(()=>
+  !document.getElementById('wheelSvg') && !document.getElementById('crSpin')
+  && typeof WHEEL_IMG==='undefined' && typeof spinWheel==='undefined'));
 const bgn=(await page.$$('#bgGrid .bgopt')).length;
 ok('出身背景是东荒的一套（'+bgn+'项）', bgn>=16 && (await page.textContent('#bgGrid')).includes('修真世家'));
 
-await page.screenshot({path:path.join(__dirname,'s1-wheel.png')});
+await page.screenshot({path:path.join(__dirname,'s1-jiepick.png')});
 await page.click('#crStart');
 await page.waitForSelector('#choices .opt',{timeout:25000});
 

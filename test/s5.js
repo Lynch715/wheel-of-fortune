@@ -28,12 +28,12 @@ await page.addInitScript(()=>{ localStorage.setItem('wanjie_cfg',JSON.stringify(
 await page.goto('http://localhost:8935/');
 
 console.log('\n【轮上仍然锁着】');
-ok('可停的辐还是三个，幽墟不在其中', await page.evaluate(()=>
-  Array.from(document.querySelectorAll('#wheelSvg .spoke:not(.locked)')).every(e=>e.dataset.k!=='幽墟')
-  && document.querySelectorAll('#wheelSvg .spoke:not(.locked)').length===3));
-ok('图例仍标着不可投胎', (await page.textContent('#wheelLegend')).includes('不可投胎'));
+ok('能投胎的还是三个，幽墟不在其中', await page.evaluate(()=>
+  Array.from(document.querySelectorAll('#jieGrid .jiebtn:not(.off)')).every(e=>e.dataset.k!=='幽墟')
+  && document.querySelectorAll('#jieGrid .jiebtn:not(.off)').length===3));
+ok('幽墟那个按钮写明只能去', (await page.textContent('#jieGrid .jiebtn[data-k="幽墟"]')).includes('只能去'));
 
-await page.click('#wheelSvg .spoke[data-k="西陆"]');
+await page.click('#jieGrid .jiebtn[data-k="西陆"]');
 await page.waitForTimeout(200);
 await page.click('#crStart');
 await page.waitForSelector('#choices .opt',{timeout:25000});

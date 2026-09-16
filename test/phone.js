@@ -64,8 +64,8 @@ for(const [W,H,label] of SIZES){
   await page.waitForTimeout(500);
   await check('封面与投胎');
   await page.evaluate(()=>{ const m=document.getElementById('createMask'); if(m&&!m.classList.contains('on')) openCreate(); });
-  await page.waitForSelector('#wheelSvg .spoke[data-k="西陆"]',{timeout:15000});
-  await page.click(`#wheelSvg .spoke[data-k="西陆"]`);
+  await page.waitForSelector('#jieGrid .jiebtn[data-k="西陆"]',{timeout:15000});
+  await page.click(`#jieGrid .jiebtn[data-k="西陆"]`);
   await page.waitForTimeout(200);
   await page.evaluate(()=>{ const d=document.getElementById('crFdWrap'); if(d) d.open=true; });
   await page.waitForTimeout(150);
