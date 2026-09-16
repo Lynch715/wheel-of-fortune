@@ -70,8 +70,8 @@ if os.path.isdir(A+'/portraits'):
         if not f.endswith('.png'): continue
         im=Image.open(f'{A}/portraits/{f}').convert('RGBA')
         im=im.crop(im.split()[3].getbbox())          # 去掉四周的空白
-        im.thumbnail((440,660),Image.LANCZOS)
-        b=io.BytesIO(); im.save(b,'WEBP',quality=70,method=6); POR[f[:-4]]=b64(b.getvalue())
+        im.thumbnail((400,600),Image.LANCZOS)   # 面谈那一列最宽 190px，两倍屏要 380，400 够了
+        b=io.BytesIO(); im.save(b,"WEBP",quality=62,method=6); POR[f[:-4]]=b64(b.getvalue())
 
 js=[]
 js.append('/* ================= 美术资产（S4 接入，由 art/ 下的原图压出来） ================= */')
