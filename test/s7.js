@@ -85,7 +85,7 @@ await page.evaluate(()=>crossRealm('幽墟')); await idle(); await page.waitForT
 ok('下去了，期限是十二月', await page.evaluate(()=>S.realm==='幽墟'&&S.abyssLayer===1&&monthIdx(S.abyssDue)===11));
 ok('提示词里带着第一层和墟使', await page.evaluate(()=>{ const b=stateBlocks(); return b.includes('【幽墟·第1层】幽墟外环')&&b.includes('墟使｜轮枢守门人'); }));
 ok('外环有黑市：淘到的东西带印记', await page.evaluate(()=>{ const n=(S.player.items['法宝']||[]).length; buyRelic(); const it=S.player.items['法宝'].slice(-1)[0]; return S.player.items['法宝'].length===n+1&&it.cursed===true; }));
-ok('半年里门不开，上不去', await page.evaluate(()=>{ return !crossTargets()[0].ok; }));
+ok('开门月里能上去；过了这个月就上不去', await page.evaluate(()=>{ const a=crossTargets()[0].ok; S.day=0; S.months++; gateTick(); return a&&!crossTargets()[0].ok; }));
 ok('十二月门开能走，月底不走就被丢回轮枢', await page.evaluate(()=>{
   while(num(S.months)<num(S.abyssDue)){ S.months++; gateTick(); }
   const canGo=S.gateOpen&&crossTargets()[0].ok&&S.realm==='幽墟';

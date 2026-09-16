@@ -833,14 +833,14 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=18;
+const SAVE_VERSION=19;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
     history:[], recent:[], over:false, ending:null, scene:null,
     difficulty:'normal', freedom:'mid', fd_act:'mid', fd_peril:'mid', fd_grow:'mid', fd_boon:'mid',
     realm:'东荒', homeRealm:'东荒', realmSince:0, realmLog:[], gateOpen:false, abyssDue:null, lordMonths:0,
-    months:0, ganzhi:0, upkeepLast:0, destitute:false, starveMonths:0, oldAgeDeath:false,
+    months:0, day:0, ganzhi:0, upkeepLast:0, destitute:false, starveMonths:0, oldAgeDeath:false,
     abyssSince:null, abyssRolls:0, abyssPaid:0, abyssFreed:false,
     vendettas:[], scars:[], ailments:[], engineNews:[], newsSeen:{}, turnedPage:[], ledgerAt:[], ranked:false, lastChallengeMonth:-99, volumes:[], ledger:[],
     memLong:true, loreSeen:0,
@@ -1022,6 +1022,12 @@ function migrate(s){
       if(n.alive!==false&&c<FOLLOW_CAP&&(!n.realm||n.realm===s.realm)&&FOLLOW_RE.test(`${n.relation||''} ${n.identity||''}`)){ n.follow=true; n.realm=s.realm; c++; }
     }
     s.v=18;
+  }
+  if(s.v<19){
+    // 按日推演：月内多一个「第几天」；上回合留下的选项，耗时从月折成天
+    if(s.day==null) s.day=0;
+    for(const o of (s.lastOptions||[])) if(o&&o.days==null&&o.months!=null) o.days=Math.round(num(o.months)*30);
+    s.v=19;
   }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
@@ -1230,7 +1236,18 @@ function dateOf(ganzhi,months,realmKey){
   if(j.era==='无光'){ const k=Math.max(0,num(months)-num((S&&S.abyssSince)||0)); return '无光·第'+(k+1)+'月'; }
   return ganzhiYear(ganzhi+yr)+' '+mo;
 }
-function dateStr(){ return dateOf(S.ganzhi||0, S.months||0, S.realm); }
+const DAY_CN=['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+function dayText(d,realmKey){
+  d=Math.max(0,Math.min(29,Math.floor(num(d))));
+  const j=JIE[realmKey||((S&&S.realm)||'东荒')]||JIE['东荒'];
+  return j.era==='干支'?DAY_CN[d]:`${d+1}日`;
+}
+function dateStr(){
+  const base=dateOf(S.ganzhi||0, S.months||0, S.realm);
+  if(!S.player) return base;
+  const d=dayText(S.day,S.realm);
+  return (JIE[S.realm]&&JIE[S.realm].era==='干支')?base+d:base+' '+d;
+}
 // 每月开销：食宿、汤药、行路打点
 function upkeepPerMonth(){
   const p=S.player; if(!p) return 0;
@@ -1511,10 +1528,15 @@ function agingTick(){
   }
   if(r>=0.78&&Math.random()<(r-0.76)*0.6*ag) S.oldAgeDeath=true;
 }
-// 推进 n 个月：扣开销、长年岁、判饥寒
-function advanceTime(n){
-  n=Math.max(0,Math.min(12,num(n)));
-  if(n<=0){ S.upkeepLast=0; S.starveMonths=0; return {cost:0,starve:0,months:0}; }
+// 推进 n 个月（老接口，自测和少数按月的地方还在用）
+function advanceTime(n){ return advanceDays(Math.max(0,Math.min(12,num(n)))*30); }
+/* 按日推演：天数先攒在 S.day，攒满 30 天才走一次月结——开销、侵蚀、界主进账、开门、年岁都还是按月算。
+   伤病、仇恨这类会慢慢变的，按天数折成零头月一起走。 */
+function advanceDays(days){
+  days=Math.max(0,Math.min(360,Math.round(num(days))));
+  if(days<=0){ S.upkeepLast=0; S.starveMonths=0; return {cost:0,starve:0,months:0,days:0}; }
+  S.day=num(S.day)+days;
+  let n=0; while(S.day>=30){ S.day-=30; n++; }
   const p=S.player;
   let cost=0, starve=0;
   for(let i=0;i<n;i++){
@@ -1529,17 +1551,32 @@ function advanceTime(n){
     worldTick(1);
     erosionMonth();
   }
-  tickNpcs(n);
-  sectTick(n);
-  cursedTick(n);
-  S.upkeepLast=cost; S.starveMonths=starve; S.destitute=starve>0;
-  if(S.destitute){ p.hp=Math.max(1,p.hp-Math.round(4*starve*fdm().starve)); }
-  const healedNow=tickAilments(n);
+  if(n){ tickNpcs(n); sectTick(n); cursedTick(n); }
+  S.upkeepLast=cost; S.starveMonths=starve;
+  if(n) S.destitute=starve>0;
+  if(S.destitute&&n){ p.hp=Math.max(1,p.hp-Math.round(4*starve*fdm().starve)); }
+  const healedNow=tickAilments(days/30);
   if(healedNow.length){ S.healedLast=(S.healedLast||[]).concat(healedNow); for(const h of healedNow) ledger(`${h}已愈`); }
   rebuildStatus();
   S.date=dateStr();
-  return {cost,starve,months:n};
+  return {cost,starve,months:n,days};
 }
+// 零头按概率进位：0.3 就是三成机会得 1。几天的事也有机会长一点，但长不多
+function sround(x){ x=Math.max(0,num(x)); const f=Math.floor(x); return f+(Math.random()<x-f?1:0); }
+// 这一回合花多少天：选项给 days 就用，老选项只给 months 就折成天
+function optDays(opt){
+  if(opt&&opt.days!=null){ const d=Math.round(num(opt.days)); if(d>=1) return Math.min(180,d); }
+  if(opt&&opt.months!=null){ const m=num(opt.months); if(m>0) return Math.min(180,Math.round(m*30)); }
+  if(opt&&opt.type==='rest') return 7;
+  return 3;
+}
+function judgeDays(j){
+  if(!j) return 3;
+  if(j.days!=null) return Math.max(0,Math.min(360,Math.round(num(j.days))));
+  if(j.months!=null) return Math.max(0,Math.min(360,Math.round(num(j.months)*30)));
+  return 3;
+}
+function daysText(d){ d=Math.round(num(d)); if(d<30) return `${d} 天`; const m=Math.floor(d/30), r=d%30; return r?`${m} 个月零 ${r} 天`:`${m} 个月`; }
 
 
 /* ================= 万界局势 =================
@@ -2001,7 +2038,7 @@ async function crossRealm(k, said){
     catch(e){ console.warn('铸造失败',e); }
     setBusy(false);
   }
-  await act(said?`${said}（引擎已办完过界：从${from}到了${k}）`:`从${from}过界，到${k}来`, {type:'normal',months:1,crossed:true});
+  await act(said?`${said}（引擎已办完过界：从${from}到了${k}）`:`从${from}过界，到${k}来`, {type:'normal',days:(k==='幽墟'||from==='幽墟')?5:15,crossed:true});
   return true;
 }
 /* 口头换界：玩家在自由输入或选项里说「去轮枢」「回东荒」「下幽墟」，引擎照过界规则办。
@@ -2486,7 +2523,7 @@ function abyssMove(dir){
     if(!r.success){
       const inj=sufferInjury(1,`往${ABYSS_LAYERS[L.n+1].name}去的路上`,false);
       ledger(`往第${L.n+1}层走，没走下去${inj?`，落下${inj.name}`:''}`);
-      act(`想往下一层${ABYSS_LAYERS[L.n+1].name}走，路没走通，被逼了回来`, {type:'normal',months:1});
+      act(`想往下一层${ABYSS_LAYERS[L.n+1].name}走，路没走通，被逼了回来`, {type:'normal',days:5});
       return;
     }
     S.abyssLayer=L.n+1;
@@ -2494,13 +2531,13 @@ function abyssMove(dir){
     ledger(`下到幽墟第${N.n}层·${N.name}`);
     if(N.n===6&&!S.reachedCore){ S.reachedCore=true; ledger('抵达墟心'); news('你站在了墟心。这地方以前没有人到过'); }
     renderPanel(); renderWorld();
-    act(`往下走，到了幽墟第${N.n}层·${N.name}`, {type:'normal',months:1});
+    act(`往下走，到了幽墟第${N.n}层·${N.name}`, {type:'normal',days:7});
   }else{
     if(L.n<=1){ toast('这里已经是外环了'); return; }
     S.abyssLayer=L.n-1;
     ledger(`退回幽墟第${L.n-1}层·${layerOf().name}`);
     renderPanel(); renderWorld();
-    act(`往上退，回到幽墟第${L.n-1}层·${layerOf().name}`, {type:'normal',months:1});
+    act(`往上退，回到幽墟第${L.n-1}层·${layerOf().name}`, {type:'normal',days:5});
   }
 }
 // 墟心门口：打吞噬者
@@ -2518,7 +2555,7 @@ function challengeDevourer(){
   setDrawer(false); saveGame();
   startDuel(n,{friendly:false,lethal:true,reason:`墟心的门口，${ABYSS_LORD}挡在那里`,
     action:`在墟心门口向${ABYSS_LORD}出手`,
-    judge:{fate:fateRoll(),check:null,worldEvent:null,months:1}});
+    judge:{fate:fateRoll(),check:null,worldEvent:null,days:1}});
 }
 /* 中层头目（规范 v3.0 第 6.4 节）：可以遇、可以谈、可以交易、可以招揽、可以杀。弱点写进提示词，引擎不硬算 */
 const ABYSS_BOSSES=[
@@ -3472,7 +3509,7 @@ const WORLD_RULES = `【机制通则】
 
 属性规则（数值一律0-100）：
 - 谈吐：社交能力，越高越能取信于人、说服别人。学识：文化水平，读书写作可提升。悟性：先天悟性，终生不变。修为：越高越强，练功可提升，中毒受伤会降低，伤愈恢复；可以把功法教给别人，自己不损；把功力输给别人才会失去相应的修为值（写成attributes.修为负数）；修为高出对方一大截（至少高出三成）且对方无力反抗时，可废掉对方修为。
-- 修为增长要慢：一回合普通练功最多+1到+3（悟性高者多一点），名师指点或典籍顿悟才可能+5以上；不可一回合暴涨。
+- 时间按日走：寻常一回合只过一到几天。修为增长要慢：只过几天的回合，修为多半不涨、至多+1；闭关练功一个月才有+1到+3（悟性高者多一点），名师指点或典籍顿悟才可能更多；不可一回合暴涨。技艺、熟练度、钱财也按这段日子的长短来给，几天的事只给零头。
 - 气血：0-100，受伤下降，休养、医药恢复；低于30为重伤，行动受限，剧烈行动会加重。
 - 声望/恶名：各0-100。仗义行事、救人、守信涨声望；为恶、滥杀、背信涨恶名。名气高会被人认出：声望高受正派敬重、被邪道忌恨；恶名高被正派追杀、被邪道招揽。
 - 武器对修为有加成。典籍可大幅提升修为，但往往残缺不全或条件极其严苛。
@@ -3545,12 +3582,12 @@ const JSON_RULE = `你必须只输出一个合法的JSON对象，不要输出任
 
 const NPC_SCHEMA = `NPC对象格式：{"name":"姓名","gender":"男/女","age":年龄数字,"identity":"身份，如：华山派三弟子","faction":"所属势力","alignment":"正派/邪道/中立","personality":["性格1","性格2"],"appearance":"大白话相貌简述","修为":数字,"谈吐":数字,"signature":"成名绝技或惯用法宝招式名","relation":"与主角关系，如：师傅/母亲/仇人/萍水相逢","好感度":数字,"爱恋值":null或数字,"mood":"当下心情两字","alive":true,"lifespan":null或寿元数字（长生之辈才填，凡人不填）,"secret":"此人不为人知的秘密（一句话）","notes":"重要备注，如恩怨、往事"}`;
 
-const OPTIONS_RULE=`options给3至5个，每个：{"text":"选项文字","hint":"一句直白的利弊提示","type":"normal|check|duel|talk|rest","months":耗时月数,"check":null或{"attr":"修为/谈吐/学识/悟性","need":难度数字},"duel":null或{"opponent":"在场NPC准确姓名","lethal":false或true},"target":null或"talk选项要深谈的NPC姓名"}。
+const OPTIONS_RULE=`options给3至5个，每个：{"text":"选项文字","hint":"一句直白的利弊提示","type":"normal|check|duel|talk|rest","days":耗时天数,"check":null或{"attr":"修为/谈吐/学识/悟性","need":难度数字},"duel":null或{"opponent":"在场NPC准确姓名","lethal":false或true},"target":null或"talk选项要深谈的NPC姓名"}。
 要求：至少1个稳妥的normal；至少1个有风险的check（need按40容易/55一般/70困难/85极难，hint写清若成若败各会怎样）；若在场有可交手之人给1个duel（lethal表示对方是否会下杀手）；若在场有值得深谈的人给1个talk；主角受伤或疲惫时给1个rest（休养/疗伤/练功）。选项之间要有真正的分歧，不要都是好事。
 **至少有1个选项要把主角带离当前地点，或者去见一个当前不在场的人**——别让五个选项都困在同一间屋子里。
 同一件事可以接连做（练功、守夜、赶路、守着一个人都行），但写出来的内容每回合必须不一样——练到哪一层、卡在哪里、被谁打断、身上添了什么毛病。不许把上一回合的选项原样再给一遍，也不许把上一回合的话换个说法再写一遍。
 rest 类选项不必每回合都有：主角气血满、又没在闭关，就别给「练功」这种填空选项。
-months表示这个行动要花掉多少个月：眼前立刻能做的事填1；养伤、寻访、赶远路填2到3；闭关练功、拜师苦学、经商坐镇填3到6。耗时越久，开销越大、世事变化越多，hint里要提一句花多久。`;
+days表示这个行动要花掉多少天，时间按日走：眼前立刻能做的事（去见个人、打听消息、逛街、赴约、打一场）填1到3；在附近办件事、小伤将养、赶几十里路填3到10；长途跋涉、出远门寻访、养重伤填15到60；只有闭关练功、拜师苦学、经商坐镇这类才填30到180。绝大多数选项应在10天以内。耗时越久，开销越大、世事变化越多，耗时10天以上的，hint里要提一句花多久。`;
 
 function initSchemaPrompt(opts){
   opts=opts||{};
@@ -3754,9 +3791,9 @@ function judgeBlock(judge){
     if(judge.convo.summary) s+=`- 这场谈话的要点：${judge.convo.summary}\n`;
     s+=`- 选项要接着这场谈话往下走：他答应的事怎么办、他提的线索追不追、他托付的事接不接。\n`;
   }
-  const mo=judge.months||1;
-  if(!judge.convo) s+=`- 本回合历时：${mo}个月（引擎推进时间，你不要写具体年月，只按这段光阴的长短来铺陈剧情的节奏）\n`;
-  if(!judge.convo) s+=`- 生计：家财${S.player.money}两，每月开销约${upkeepPerMonth()}两，这${mo}个月约需${upkeepPerMonth()*mo}两${S.player.money<upkeepPerMonth()*mo?'——钱不够了，剧情须写出捉襟见肘':''}`;
+  const dd=judgeDays(judge), need=Math.round(upkeepPerMonth()*dd/30);
+  if(!judge.convo) s+=`- 本回合历时：${daysText(dd)}（引擎推进时间，你不要写具体年月日；${dd<=3?'就是眼前这一两天里的事，不要写「数月后」「转眼入秋」':(dd<30?'写这几天、十几天里的事，不要跳成几个月':'这段光阴较长，可以写赶路、闭关的经过')}）\n`;
+  if(!judge.convo) s+=`- 生计：家财${S.player.money}两，每月开销约${upkeepPerMonth()}两，这段日子约需${need}两${S.player.money<need?'——钱不够了，剧情须写出捉襟见肘':''}`;
   return s;
 }
 
@@ -3767,7 +3804,7 @@ function convoAfterReq(){
 - 本回合结束时，把主角所在的具体地点写进scene.location；scene.unresolved 与 resolvedInfo 照常维护（只列眼下真正还悬着的事，至多4条；了结的写进 resolvedInfo）。
 - 数值变化只写这场谈话真正引起的（好感、关系、态度），写进npcUpdates；谈话里已落账的东西不要再写一遍。
 - npcEvents、rumors 可以留空。
-- options给3至5个，格式同常规：{"text":"","hint":"","type":"normal|check|duel|talk|rest","months":1,"check":null,"duel":null,"target":null}。选项要接着这场谈话往下走：他答应的事怎么办、他提的线索追不追、他托付的事接不接。可以有一个把主角带离当前地点的，但不强求。
+- options给3至5个，格式同常规：{"text":"","hint":"","type":"normal|check|duel|talk|rest","days":1,"check":null,"duel":null,"target":null}。选项要接着这场谈话往下走：他答应的事怎么办、他提的线索追不追、他托付的事接不接。可以有一个把主角带离当前地点的，但不强求。
 - duel 为 null；gameOver 为 false。`;
 }
 function turnPrompt(action, judge){
@@ -4410,12 +4447,15 @@ function applyTurn(d, action, judge){
   const p=S.player, ch=d.playerChanges||{};
   const failed=judge&&judge.check&&!judge.check.success || (d.check&&d.check.success===false);
   const fate=judge?judge.fate:10;
-  const months=(judge&&judge.months===0)?0:Math.max(1,Math.min(12,num(judge&&judge.months)||1));
+  const days=judge?judgeDays(judge):3;
+  const months=days/30;                       // 折成月，底下按月写的上限跟着缩
   // 四维
   if(ch.attributes) for(const k in ch.attributes){
     let dv=num(ch.attributes[k]);
     if(!dv||p.attributes[k]===undefined||k==='悟性') continue;
-    if(k==='修为'&&dv>0){ const cap=growthCap()*months; dv=Math.min(dv,fate>=19?cap*2:cap); }
+    const cap=growthCap()*(fate>=19?2:1);
+    if(k==='修为'&&dv>0){ dv=months>=1?Math.min(dv,Math.round(cap*months)):sround(Math.min(dv,cap)*months*1.5); }   // 几天的事按天数折成零头
+    else if(dv>0&&months<1){ dv=sround(dv*Math.min(1,months*3)); }                                              // 谈吐学识：长得比修为快些，也按天折
     if(failed&&dv>0) dv=Math.min(dv,1);
     p.attributes[k]=(k==='修为'?clampW(p.attributes[k]+dv):clamp(p.attributes[k]+dv)); lastDeltas[k]=dv;
   }
@@ -4425,7 +4465,7 @@ function applyTurn(d, action, judge){
   if(hpd) { p.hp=clamp(p.hp+hpd,0,100); lastDeltas['气血']=hpd; }
   if(hpd>=0&&!(judge&&judge.duel)&&p.hp<100){
     // 自然将养：饥寒交迫时几乎养不好伤
-    const regen=Math.round(Math.min(40,(p.hp<30?4:8)*months*(S.destitute?(1-0.75*fdm().starve):1)*(hasScar('暗伤')?0.4:1)));
+    const regen=sround(Math.min(40,(p.hp<30?4:8)*months*(S.destitute?(1-0.75*fdm().starve):1)*(hasScar('暗伤')?0.4:1)));
     if(regen){ p.hp=clamp(p.hp+regen,0,100); lastDeltas['气血']=(lastDeltas['气血']||0)+regen; }
   }
   if(p.hp<=0&&!d.gameOver){ p.hp=1; }
@@ -4435,7 +4475,7 @@ function applyTurn(d, action, judge){
   if(ch.money){
     let dm=num(ch.money);
     if(failed&&dm>0) dm=0;
-    if(dm>0) dm=Math.min(dm,Math.round((fate>=19?3000:600)*Math.max(0.25,months)*fdm().money));   // 防通胀：横财要有来由
+    if(dm>0) dm=Math.min(dm,Math.round((fate>=19?3000:600)*Math.max(0.1,months)*fdm().money));   // 防通胀：横财要有来由
     if(dm){ p.money=Math.max(0,Math.round(p.money+dm)); lastDeltas['家财']=dm; }
   }
   // 年龄只由引擎按月推进，模型写什么都不算（规范 v1.1 第 4.4 条）
@@ -4456,7 +4496,8 @@ function applyTurn(d, action, judge){
     if(!p.skills[k]&&!dv&&ds){ p.skills[k]={level:skillLevelFromText(ds),desc:ds}; logGot(`学会技艺【${k}】（${ds}）`); continue; }
     if(!dv&&!ds) continue;
     const cur=(p.skills[k]&&typeof p.skills[k]==='object')?p.skills[k]:{level:skillLevel(p.skills[k]),desc:skillDesc(p.skills[k])};
-    if(dv){ cur.level=pw(cur.level+dv); lastDeltas['技艺·'+k]=dv; }
+    const dvs=(dv>0&&months<1)?sround(dv*Math.min(1,months*3)):dv;
+    if(dvs){ cur.level=pw(cur.level+dvs); lastDeltas['技艺·'+k]=dvs; }
     if(ds) cur.desc=ds;
     p.skills[k]=cur;
   }
@@ -4478,7 +4519,7 @@ function applyTurn(d, action, judge){
     if(!a) continue;
     let dv=num(t.level);
     if(dv<=0) continue;
-    dv=Math.min(dv, 4*months*(fate>=19?2:1));
+    dv=months>=1?Math.min(dv, Math.round(4*months*(fate>=19?2:1))):sround(Math.min(dv,4)*months*2);
     if(failed) dv=Math.min(dv,1);
     a.level=clamp(num(a.level)+dv);
     lastDeltas['功法·'+a.name]=dv;
@@ -4617,9 +4658,9 @@ function applyTurn(d, action, judge){
   }
   tickVendettas(months);
   // 光阴流逝：扣食宿汤药、长年岁、判饥寒
-  const up=advanceTime(months);
+  const up=advanceDays(days);
   rankRefresh();
-  lastDeltas['光阴']=months;
+  lastDeltas['光阴']=days;
   if(up.cost) lastDeltas['食宿']=-up.cost;
   if(up.starve) lastDeltas['饥寒']=up.starve;
   S.history.push({turn:S.turn, action, summary:d.summary||''});
@@ -5138,7 +5179,7 @@ async function afterDuel(){
   finalizeDuelHp();
   if(S.player.hp<=0) S.player.hp=1;
   renderPanel(); checkAchievements();
-  const judge=duel.judge||{fate:fateRoll(),check:null,worldEvent:null};
+  const judge=duel.judge||{fate:fateRoll(),check:null,worldEvent:null,days:1};
   judge.duel=true;
   const dl=duel;
   duel=null; S.duelState=null; saveGame();
@@ -5418,7 +5459,7 @@ function endConvo(){
     convo=null; saveGame();
     if(!S.over&&!busy){
       runTurn(`与${aftermath.name}谈过之后`,
-        {fate:10,check:null,worldEvent:null,duel:false,months:0,convo:aftermath},{});
+        {fate:10,check:null,worldEvent:null,duel:false,days:0,convo:aftermath},{});
     }
     return;
   }
@@ -5946,7 +5987,7 @@ function renderWorld(){
     rows.sort((a,b)=>(a.dead?-1:a.w)-(b.dead?-1:b.w)).reverse();
     $('wRanking').innerHTML=rows.map((r,i)=>`<div class="rank ${r.me?'me':''} ${r.dead?'deadr':''}"><span class="rn">${r.dead?'—':i+1}</span><span class="rname">${esc(r.name)}<small>${esc(r.sub)}</small></span><span class="rv">${r.w}</span>${(!r.me&&!r.dead)?`<button class="mbtn" data-ch="${esc(r.raw||r.name)}" style="padding:2px 8px;font-size:12px;margin-left:6px">挑战</button>`:''}</div>`).join('')
       +((S.world.fallen||[]).length?`<div style="font-size:12px;color:var(--ink-soft);margin-top:6px;border-top:1px dashed var(--paper-edge);padding-top:5px">往生录：${S.world.fallen.slice(-8).map(x=>esc(x.name)).join('、')}</div>`:'')
-      +`<div style="font-size:12px;color:var(--ink-soft);margin-top:5px">${S.ranked?'你已在榜。':'尚未入榜——胜过一位榜上人物才算数。'}上门挑战要跋涉三个月，${cooldownText()}${num(S.world.vacant)>0?`　⚑ 榜上尚有 ${S.world.vacant} 个空缺`:''}</div>`;
+      +`<div style="font-size:12px;color:var(--ink-soft);margin-top:5px">${S.ranked?'你已在榜。':'尚未入榜——胜过一位榜上人物才算数。'}上门挑战要跋涉二十来天，${cooldownText()}${num(S.world.vacant)>0?`　⚑ 榜上尚有 ${S.world.vacant} 个空缺`:''}</div>`;
     $('wRanking').querySelectorAll('button[data-ch]').forEach(b=>b.onclick=()=>challengeRanked(b.dataset.ch));
   }
   const fs=(S.world&&S.world.factions||[]).filter(f=>!f.realm||f.realm===jieName());
@@ -5993,7 +6034,7 @@ function changeLines(d){
   for(const k of ['声望','恶名']){ const v=lastDeltas[k]; if(v) out.push(`${k} ${v>0?'+':''}${v}`); }
   if(lastDeltas['家财']) out.push(`家财 ${lastDeltas['家财']>0?'+':''}${lastDeltas['家财']} 两`);
   for(const k in lastDeltas){ if(k.indexOf('功法·')===0&&lastDeltas[k]) out.push(`${k.slice(3)} 熟练 +${lastDeltas[k]}`); }
-  if(lastDeltas['光阴']) out.push(`光阴 过去 ${lastDeltas['光阴']} 个月`);
+  if(lastDeltas['光阴']) out.push(`光阴 过去 ${daysText(lastDeltas['光阴'])}`);
   if(lastDeltas['食宿']) out.push(`食宿汤药 ${lastDeltas['食宿']} 两`);
   if(S.sectPay) out.push(`${S.sect?S.sect.name:'势力'}月例 +${S.sectPay} 两`);
   if(lastDeltas['势力贡献']) out.push(`势力贡献 ${lastDeltas['势力贡献']>0?'+':''}${lastDeltas['势力贡献']}`);
@@ -6115,8 +6156,8 @@ function renderOptions(opts){
     const b=document.createElement('button');
     b.className='opt';
     let tag='';
-    const mo=optMonths(o);
-    if(mo>1) tag+=`<span class="tag rest">耗时 ${mo} 月</span>`;
+    const dd=optDays(o);
+    if(dd>=10) tag+=`<span class="tag rest">耗时 ${daysText(dd)}</span>`;
     if(o.type==='check'&&o.check&&o.check.attr){
       const dc=Math.max(20,num(o.check.need)+diff().dc), ch=optChance(o.check.attr,o.check.need);
       tag+=`<span class="tag check">🎲 ${esc(o.check.attr)} 难${dc} · 约${ch}%</span>`;
@@ -6293,20 +6334,16 @@ async function forgeWorld(){
   setBusy(false);
 }
 
-function optMonths(opt){
-  if(opt&&opt.months!=null){ const m=num(opt.months); if(m>=1) return Math.min(6,Math.round(m)); }
-  if(opt&&opt.type==='rest') return 2;
-  return 1;
-}
+
 // 模型偶尔会返回空选项（比如它以为这局结束了），不能让玩家没得可点
 /* 模型常把上一回合的选项原样再给一遍，玩家看着就像卡住了。
    跟上回太像、或者跟玩家刚做完的事太像的，直接换掉。 */
 const FRESH=[
-  {text:'收拾行装，往邻县走一趟',hint:'换个地方，说不定有转机',type:'normal',months:2},
-  {text:'去镇上茶楼坐坐，听听南来北往的人说什么',hint:'消息都在闲话里',type:'normal',months:1},
-  {text:'循着近来听来的消息，亲自去看个究竟',hint:'未必安全',type:'check',months:2,check:{attr:'悟性',need:55}},
-  {text:'寻一个久未走动的旧识,叙叙旧',hint:'人情是攒出来的',type:'normal',months:1},
-  {text:'上路，走到哪算哪',hint:'这一界大得很',type:'normal',months:2}
+  {text:'收拾行装，往邻县走一趟',hint:'换个地方，说不定有转机',type:'normal',days:20},
+  {text:'去镇上茶楼坐坐，听听南来北往的人说什么',hint:'消息都在闲话里',type:'normal',days:1},
+  {text:'循着近来听来的消息，亲自去看个究竟',hint:'未必安全',type:'check',days:5,check:{attr:'悟性',need:55}},
+  {text:'寻一个久未走动的旧识,叙叙旧',hint:'人情是攒出来的',type:'normal',days:2},
+  {text:'上路，走到哪算哪',hint:'这一界大得很',type:'normal',days:15}
 ];
 /* 挂着人名、地名、宿命的选项是钩子，玩家没点不代表该收走；
    「继续练功」「歇一口气」这种填空选项才是该换掉的。 */
@@ -6357,10 +6394,10 @@ function dedupeOptions(opts){
 }
 function fallbackOptions(){
   const p=S.player, o=[];
-  if(p.hp<60) o.push({text:'先寻医问药，把伤将养好',hint:'花些银钱，稳妥',type:'rest',months:2});
-  o.push({text:'就地歇一口气，理一理眼下的局面',hint:'安全，但世事不等人',type:'rest',months:1});
-  o.push({text:'四下打听，看看外头出了什么事',hint:'兴许有意外的消息',type:'normal',months:1});
-  o.push({text:'收拾行装，接着赶路',hint:'走一步看一步',type:'normal',months:1});
+  if(p.hp<60) o.push({text:'先寻医问药，把伤将养好',hint:'花些银钱，稳妥',type:'rest',days:20});
+  o.push({text:'就地歇一口气，理一理眼下的局面',hint:'安全，但世事不等人',type:'rest',days:3});
+  o.push({text:'四下打听，看看外头出了什么事',hint:'兴许有意外的消息',type:'normal',days:2});
+  o.push({text:'收拾行装，接着赶路',hint:'走一步看一步',type:'normal',days:7});
   return o;
 }
 /* 自由输入挑属性：以前一律按最高属性掷，一个书生去跟人动手也凭学识，说不通。
@@ -6377,7 +6414,7 @@ function guessAttr(t){
   return null;
 }
 function makeJudge(opt,action){
-  const judge={fate:fateRoll(),check:null,worldEvent:tideEvent()||pickWorldEvent(),duel:false,months:optMonths(opt)};
+  const judge={fate:fateRoll(),check:null,worldEvent:tideEvent()||pickWorldEvent(),duel:false,days:optDays(opt)};
   const stuck=stuckLevel();
   if(stuck>=0.5){ judge.stuck=Math.round(stuck*100); judge.nudge=pickNudge(action||(opt&&opt.text)||''); }
   if(judge.fate<=3&&fdm().doom>0) judge.doom=makeDoom();
@@ -6409,8 +6446,8 @@ function challengeRanked(name){
   setDrawer(false);
   saveGame();
   startDuel(n,{friendly:false,lethal:false,reason:`你千里迢迢寻上门，向${n.name}讨教`,
-    action:`跋涉三月寻访${n.name}，上门挑战`,
-    judge:{fate:fateRoll(),check:null,worldEvent:pickWorldEvent(),months:3}});
+    action:`跋涉二十来天寻访${n.name}，上门挑战`,
+    judge:{fate:fateRoll(),check:null,worldEvent:pickWorldEvent(),days:20}});
 }
 
 // 闭关参悟典籍：引擎先判定，再交给模型叙述
@@ -6530,7 +6567,7 @@ async function runTurn(action, judge, extra){
       hunter.eta=null; hunter.arrived=S.turn;
       renderOptions([]); saveGame(); setBusy(false);
       toast('⚑ '+hn.name+' 寻上门来了！','ach');
-      startDuel(hn,{lethal:hunter.lethal,reason:hunter.reason||`${hn.name}寻仇`,action:`（承上）${hn.name}寻仇上门，动起手来`,judge:{fate:fateRoll(),check:null,worldEvent:null,months:1},vendetta:hunter.name});
+      startDuel(hn,{lethal:hunter.lethal,reason:hunter.reason||`${hn.name}寻仇`,action:`（承上）${hn.name}寻仇上门，动起手来`,judge:{fate:fateRoll(),check:null,worldEvent:null,days:1},vendetta:hunter.name});
       return;
     }
     const near=(S.vendettas||[]).find(v=>v.eta!=null&&num(v.eta)<=2&&num(v.cool)<=0);
