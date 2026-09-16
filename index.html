@@ -241,6 +241,10 @@ body{
 .courtbar{height:76px;margin:-2px -2px 8px;border-radius:6px;background-size:cover;background-position:center 62%;
   box-shadow:inset 0 -28px 34px -18px var(--paper)}
 #jieNote{font-size:12.5px;color:var(--ink-soft);line-height:1.8;margin:0 2px 2px}
+.npcgrp{font-size:12px;color:var(--ink-soft);letter-spacing:2px;margin:10px 2px 4px;border-bottom:1px dashed var(--paper-edge);padding-bottom:2px}
+.npcgrp:first-child{margin-top:0}
+.npc.faraway{opacity:.55}
+.chapter .chapmark .chrealm{margin-right:6px}
 .avpick{display:grid;grid-template-columns:repeat(8,1fr);gap:7px;max-height:188px;overflow-y:auto;padding:7px;background:rgba(0,0,0,.05);border-radius:6px;margin-top:4px}
 .avpick .cell{width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;background-repeat:no-repeat;background-position:center}
 .avpick .cell{background-size:cover}
@@ -829,7 +833,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=17;
+const SAVE_VERSION=18;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -1008,6 +1012,16 @@ function migrate(s){
     if(!s.newsSeen||typeof s.newsSeen!=='object') s.newsSeen={};
     if(s.scene&&s.scene.uAge){ for(const k in s.scene.uAge) if(typeof s.scene.uAge[k]==='number'&&!(s.scene.uMon&&s.scene.uMon[k]!=null)){ s.scene.uMon=s.scene.uMon||{}; s.scene.uMon[k]=num(s.months); } }
     s.v=17;
+  }
+  if(s.v<18){
+    // 随行：老档里的人按关系补一遍，最多三个；已经不在同一界的不跟
+    let c=0;
+    for(const n of (s.npcs||[])){
+      if(!n||n.follow!=null) continue;
+      n.follow=false;
+      if(n.alive!==false&&c<FOLLOW_CAP&&(!n.realm||n.realm===s.realm)&&FOLLOW_RE.test(`${n.relation||''} ${n.identity||''}`)){ n.follow=true; n.realm=s.realm; c++; }
+    }
+    s.v=18;
   }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
@@ -1861,6 +1875,7 @@ function abyssEject(){
   S.realm='轮枢'; S.realmSince=S.months; S.foreignFrom=('轮枢'===S.homeRealm?null:S.months);
   (S.realmLog=S.realmLog||[]).push({realm:'轮枢',turn:S.turn,months:S.months});
   S.abyssSince=null; S.abyssRolls=0; S.abyssDue=null; S.abyssLayer=0;
+  moveFollowers('轮枢');
   if(p) p.hp=Math.max(1,num(p.hp)-rnd(15,30));
   ledger('门合上时还在幽墟里，被一股说不上来的力道扔回了轮枢');
   news('一股说不上来的力道把你从幽墟里扔了出来，醒来时躺在轮枢的界门广场上');
@@ -1942,10 +1957,11 @@ function crossTargets(){
   }
   return out;
 }
-async function crossRealm(k){
-  if(busy||!S||S.over) return;
+// 过界报价：去得了去不了、花多少、凭什么。按钮和口头换界共用这一份
+function crossQuote(k){
   const t=crossTargets().find(x=>x.key===k);
-  if(!t||!t.ok){ toast(t?t.why:'去不了'); return; }
+  if(!t) return {ok:false, why:(k===jieName()?`人已经在${k}了`:'去不了')};
+  if(!t.ok) return {ok:false, why:t.why};
   const free=fdm().freeAct;
   const here0=jieName(), isAbyss=(k==='幽墟'), leaveAbyss=(here0==='幽墟');
   const pass=leaveAbyss?null:(isAbyss?abyssPass():passItem());
@@ -1955,12 +1971,21 @@ async function crossRealm(k){
   else if(pass){ how=`凭《${pass.it.name}》过界`; }
   else if(isAbyss){ cost=Math.round(cost*2); how='没有神殿的引荐，只能出双倍的价钱雇走私客下去'; }
   else { cost=Math.round(cost*2); how='没有通行文书，只能出双倍的价钱找人带路'; }
-  if(S.player.money<cost){ toast(`盘缠不够：过界要 ${cost} 两，你只有 ${S.player.money} 两`); return; }
+  if(num(S.player.money)<cost) return {ok:false, why:`盘缠不够：过界要 ${cost} 两，手上只有 ${num(S.player.money)} 两`, cost};
+  return {ok:true, cost, how, pass, free};
+}
+async function crossRealm(k, said){
+  if(busy||!S||S.over) return false;
+  const q=crossQuote(k);
+  if(!q.ok){ toast(q.why); return false; }
+  const {cost,how,pass,free}=q;
   S.player.money-=cost;
   if(pass&&!free){ const arr=S.player.items[pass.cat]; const i=arr.indexOf(pass.it); if(i>=0) arr.splice(i,1); }
   const from=jieName();
   S.realm=k; S.realmSince=S.months; S.foreignFrom=(k===S.homeRealm?null:S.months);
   (S.realmLog=S.realmLog||[]).push({realm:k,turn:S.turn,months:S.months});
+  const went=moveFollowers(k);
+  if(went.length) ledger(`${went.join('、')}随你一道到了${k}`);
   if(k==='幽墟'){ S.abyssPaid=cost; S.abyssLayer=1; S.erosionClock=0; S.abyssDue=nextGateAfter(S.months); S.abyssSince=S.months; S.abyssRolls=0; news('天底是一片不动的暗红，从这一刻起就没再变过'); grantOuterQuest(); }
   if(k!==S.homeRealm) grantAbyssQuest();
   if(from==='幽墟'){ S.abyssSince=null; S.abyssRolls=0; S.abyssDue=null; S.abyssLayer=0; ledger('从幽墟上来了'); }
@@ -1976,7 +2001,32 @@ async function crossRealm(k){
     catch(e){ console.warn('铸造失败',e); }
     setBusy(false);
   }
-  await act(`从${from}过界，到${k}来`, {type:'normal',months:1});
+  await act(said?`${said}（引擎已办完过界：从${from}到了${k}）`:`从${from}过界，到${k}来`, {type:'normal',months:1,crossed:true});
+  return true;
+}
+/* 口头换界：玩家在自由输入或选项里说「去轮枢」「回东荒」「下幽墟」，引擎照过界规则办。
+   以前这句话只交给模型写，模型把人写到了别界，引擎还当他在原地——颜色不换，身边还是老界的人。 */
+const REALM_KEYS=['东荒','西陆','樱洲','轮枢','幽墟'];
+function travelIntent(text){
+  const t=String(text||'');
+  const re=/(前往|赶往|赶去|动身去|动身前往|启程去|启程前往|过界到|过界去|直奔|回到|返回|回|去|往|进|下到|下)(东荒|西陆|樱洲|轮枢|幽墟)(?!来的|的人|的消息|的事|那边的人|来人|传来)/g;
+  let m, hit=null;
+  while((m=re.exec(t))){
+    const pre=t.slice(Math.max(0,m.index-2),m.index);
+    if(/不|别|没|莫|勿/.test(pre)) continue;
+    if(m[1]==='下'&&m[2]!=='幽墟') continue;
+    if(m[1]==='进'&&m[2]!=='幽墟'&&m[2]!=='轮枢') continue;
+    hit=m[2];
+  }
+  return (hit&&hit!==jieName())?hit:null;
+}
+// 口头换界的路线：三界之间不直达，先落到轮枢
+function travelLeg(k){
+  const here=jieName();
+  if(k===here) return null;
+  if(TIE_REALMS.indexOf(here)>=0&&(TIE_REALMS.indexOf(k)>=0||k==='幽墟')) return '轮枢';
+  if(here==='幽墟'&&k!=='轮枢') return '轮枢';
+  return k;
 }
 
 /* ================= 难度 ================= */
@@ -3409,6 +3459,7 @@ const REALM_LAW = `【世界铁律】
   面板上已经登记的表字、爵位、法号、绰号、尊称可以照用（「$X道友」「维尔纳伯爵」「玄斋殿」），但不可现编一个面板上没有的。
 - 幽墟去得了，但不是能安居的地方；幽墟来的东西一律有代价。
 - **轮外之物**：幽墟的魔族是它带来的、或是被它改过的。它要的是占领三界——三界再有世仇，到那一步也得一起扛。真身谁也没见过，各界叫法不同：东荒叫噬轮者，西陆叫深渊之外者，樱洲叫常暗，轮枢的命运神殿称它轮外之物，幽墟的魔族只叫「祂」。**写哪一界的人，就只准用哪一界的叫法**——东荒的老道不会说「常暗」。在主角亲眼见到之前，这一切都只是传说、占卜和幸存者的胡话，不要写成板上钉钉的事。
+- **换界只由引擎办**：主角此刻在哪一界，以【当前所在】为准。引擎没说他已经过界，就不许在剧情里把他写到别的界去，也不许写他「已经到了」别界；想去别界的，写到他打点行装、动身为止。
 - 人物言行须符合其年龄、身份和性格。可以有阴谋暗线。
 - {{CHOSEN}}`;
 
@@ -3570,6 +3621,7 @@ ${JSON_RULE}
 // 只把「眼下要紧的人」摊开写，其余的给个名册就够了
 function isRelevantNpc(n){
   if(!n.alive) return false;
+  if(n.follow) return true;                           // 随行的人一直在眼前
   if(n.realm && n.realm!==jieName()) return false;   // 不在这一界的人，落进「别处的旧识」
   if(n['爱恋值']!=null) return true;
   if(S.turn-(n.lastSeen||0)<=6) return true;
@@ -3628,8 +3680,9 @@ ${situBlock()}
 【主角身世】${p.backstory}
 【宿命】
 ${quests}
+【随行的人（跟着主角走，主角在哪他们就在哪）】${followers().map(n=>n.name).join('、')||'（无）'}
 【眼下要紧的人】${JSON.stringify(npcBrief)}
-【别处的旧识（要用到时可自行取用其细节，务必与前文相合）】${farText}
+【别处的旧识（不在主角眼前：远在别界的人本回合不会露面、不说话、不出现在 npcEvents 里，至多以别界传来的风闻提一句）】${farText}
 【已亡故】${goneText}
 【当世格局】${world}
 【前尘卷录（早年经历的概要）】
@@ -3750,7 +3803,7 @@ ${judge.convo?convoAfterReq():`请推演本回合。要求：
   那是他早就会的；其中有几门还是他自己教出去的，更不可能由对方回传。要给就给他没有的。
 - 寿元只有奇遇能长（千年灵药、内功一路大成、高人易筋洗髓、异人相授驻颜之法之类），写进playerChanges.lifespan（增量）与lifespanReason（一句话缘由），并在剧情里把这场奇遇写足。寻常疗伤进补一律不许加寿元；给多少由引擎裁定，你只管提。
 - 初次登场的新NPC写入newNpcs（完整面板含secret，不得简化）；一回合最多添2人，宁可少不可滥。已有NPC的变化写入npcUpdates；若剧情揭开了某NPC的秘密，写secretRevealed:true。
-- npcEvents写1-2条相识NPC之间的互动琐事或人生进展（嫁娶、交恶、生死等，须有因果）。
+- npcEvents写1-2条相识NPC之间的互动琐事或人生进展（嫁娶、交恶、生死等，须有因果），**只写【眼下要紧的人】和【随行的人】里的、跟主角同在一界的人**；别界的旧识不写进 npcEvents，他们的消息至多一条，放进 rumors，并写明是从哪一界传来的。
 - rumors**固定写两条**：一条本界的，一条轮枢传来的异界风闻（点明是哪一界的事）。万界榜人物或势力有变动时写rankingUpdates/factionUpdates。
 - 万界榜有空缺时，可用rankingAdd补一位新上榜的高手（给出姓名、所属、修为、一句成名评价），要像是世间本就有这么个人，别硬造。
 - ${OPTIONS_RULE}
@@ -4180,6 +4233,35 @@ function ageUnresolved(){
     }
   }
 }
+/* 随行：跟着主角换界的人。伴侣、随从、徒弟、式神之类默认跟，玩家可以在人物详情里改；最多带三个 */
+const FOLLOW_CAP=3;
+const FOLLOW_RE=/伴侣|道侣|妻子|夫人|夫君|丈夫|娘子|未婚妻|未婚夫|随从|侍从|侍女|侍卫|书童|小厮|跟班|徒弟|徒儿|式神|使魔|契约兽|坐骑|护卫/;
+function followers(){ return (S&&S.npcs||[]).filter(n=>n&&n.alive&&n.follow); }
+function setFollow(n,on,quiet){
+  if(!n) return false;
+  if(on&&!n.follow){
+    if(!n.alive) return false;
+    if(followers().length>=FOLLOW_CAP){ if(!quiet) toast(`身边最多带 ${FOLLOW_CAP} 个人`); return false; }
+    if(n.realm&&n.realm!==jieName()){ if(!quiet) toast(`${n.name}远在${n.realm}，得先见上面`); return false; }
+    n.follow=true; n.realm=jieName();
+    if(!quiet) ledger(`${n.name}从此跟在你身边`);
+    return true;
+  }
+  if(!on&&n.follow){ n.follow=false; if(!quiet) ledger(`${n.name}留在了${n.realm||jieName()}`); return true; }
+  return false;
+}
+function autoFollow(n){
+  if(!n||n.follow!=null||!n.alive) return;
+  n.follow=false;
+  if(FOLLOW_RE.test(`${n.relation||''} ${n.identity||''}`)) setFollow(n,true,true);
+}
+function moveFollowers(k){
+  const out=[];
+  for(const n of followers()){ n.realm=k; out.push(n.name); }
+  return out;
+}
+// 这个人此刻在不在主角眼前的这一界
+function npcHere(n){ return !!n&&(n.follow||!n.realm||n.realm===jieName()); }
 function findNpc(name){
   if(!name) return null;
   name=String(name).trim();
@@ -4221,6 +4303,7 @@ function applyInit(d, opts){
   p.lifespan=Math.max(p.age+8,num(p.lifespan)||rnd(70,86));
   S.player = p;
   S.npcs = (d.npcs||[]).filter(n=>n&&n.name).map(normNpc);
+  for(const n of S.npcs) autoFollow(n);
   S.quests=(d.quests||[]).filter(q=>q&&q.title).slice(0,5).map(q=>({title:q.title,desc:plain(q.desc),progress:0,status:'进行中'}));
   S.scene = normScene(d.scene);
   S.runId='r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -4451,7 +4534,8 @@ function applyTurn(d, action, judge){
       else n['爱恋值']=clamp(n['爱恋值']+num(u['爱恋值']));
       if(n['爱恋值']!==b) logGot(b==null?`${n.name} 动了情（爱恋 ${n['爱恋值']}）`:`${n.name} 爱恋 ${n['爱恋值']>b?'+':''}${n['爱恋值']-b}（今 ${n['爱恋值']}）`);
     }
-    if(u.relation) n.relation=u.relation;
+    if(u.relation){ n.relation=u.relation; if(n.follow==null) autoFollow(n); }
+    if(u.follow===true||u.follow===false){ if(setFollow(n,u.follow,true)) logGot(u.follow?`${n.name} 跟在了你身边`:`${n.name} 留了下来`); }
     if(u.alive===false&&n.alive!==false){ n.alive=false; ledger(`${n.name}死了`); logGot(`${n.name} 亡故`); }
     if(u.identity) n.identity=u.identity;
     if(u.faction) n.faction=u.faction;
@@ -4466,7 +4550,7 @@ function applyTurn(d, action, judge){
     const b=bossOf(o.name);
     if(b){ o['修为']=b.wu; o.faction='幽墟头目'; o.realm='幽墟'; o.identity=`幽墟头目·${b.title}`; o.alignment=o.alignment||'邪道'; if(bossDead(b)) continue; }
     if(erosionStage()>=3&&TIE_REALMS.indexOf(jieName())>=0) o['好感度']=clamp(num(o['好感度'])-10);   // 被幽墟标记过的人，三界的人见了不自在
-    S.npcs.push(o); logGot(`结识新人物【${o.name}】（${o.relation||''}）`);
+    S.npcs.push(o); autoFollow(o); logGot(`结识新人物【${o.name}】（${o.relation||''}）${o.follow?'，跟在你身边':''}`);
   } }
   // 宿命
   for(const q of (d.questUpdates||[])){
@@ -5237,6 +5321,7 @@ let convo=null;
 function openConvo(npc){
   if(busy||!S||S.over) return;
   if(!npc.alive){ toast(npc.name+'已经不在人世了'); return; }
+  if(!npcHere(npc)){ toast(`${npc.name}远在${npc.realm}，经轮枢过去才见得着`); return; }
   convo={npc, msgs:[], favorTotal:0, giftMode:false, secretRevealed:false, gains:[]};
   $('npcMask').classList.remove('on');
   renderConvoHead();
@@ -5324,6 +5409,7 @@ function endConvo(){
     const div=document.createElement('div'); div.className='chapter';
     div.innerHTML=`<div class="chapmark">面谈 · ${esc(n.name)}</div><div class="chaptime">${esc(S.date)}</div><div class="ntext" style="margin-top:20px">${convo.msgs.map(m=>`<p>${m.role==='me'?`<b>${esc(S.player.name)}</b>：<q>${esc(m.text)}</q>`:`<b>${esc(n.name)}</b>：${esc(m.text).replace(/「([^」]*)」/g,'<q>$1</q>')}`}</p>`).join('')}
       <div class="subblock"><li>${esc(convo.summary||('与'+n.name+'交谈了一番'))}${convo.favorTotal?`　${esc(n.name)}好感 ${convo.favorTotal>0?'+':''}${convo.favorTotal}`:''}${convo.secretRevealed?'　✦ 探知一个秘密':''}</li>${gains.map(g=>`<li>✦ ${esc(g)}</li>`).join('')}</div></div>`;
+    stampChapter(div);
     $('story').appendChild(div); div.scrollIntoView({behavior:'smooth',block:'end'});
     logChapter(div);
     checkAchievements(); renderPanel(); saveGame();
@@ -5471,14 +5557,21 @@ function npcColor(n){ return n['爱恋值']!=null?'var(--pink)':(n.alignment==='
 function renderPeople(){
   const list=$('npcList');
   if(!S.npcs.length){ list.innerHTML='<div class="empty">尚无故人</div>'; return; }
-  list.innerHTML=S.npcs.map((n,i)=>{
+  const row=(n,i)=>{
     const love=n['爱恋值']!=null;
-    return `<div class="npc ${n.alive?'':'dead'}" data-i="${i}">
+    return `<div class="npc ${n.alive?'':'dead'} ${(n.alive&&!npcHere(n))?'faraway':''}" data-i="${i}">
       ${avatarFace(n)}
       <div class="ninfo"><div class="nname">${esc(n.name)} ${n.alive?'':'〔亡故〕'}${n.secretKnown?' <small style="color:#6a4a8a">✦知其秘</small>':''}</div><div class="nrel">${esc(n.relation)} · ${esc(n.identity)} · ${esc(n.mood||'')}</div></div>
       <div class="nfav" style="color:${favColor(n)}"><span class="favnum">${love?n['爱恋值']:n['好感度']}</span><br><small>${love?'爱恋':'好感'}</small></div>
     </div>`;
-  }).join('');
+  };
+  const idx=S.npcs.map((n,i)=>i);
+  const fol=idx.filter(i=>S.npcs[i].alive&&S.npcs[i].follow);
+  const near=idx.filter(i=>S.npcs[i].alive&&!S.npcs[i].follow&&npcHere(S.npcs[i]));
+  const away=idx.filter(i=>S.npcs[i].alive&&!npcHere(S.npcs[i]));
+  const dead=idx.filter(i=>!S.npcs[i].alive);
+  const grp=(t,a)=>a.length?`<div class="npcgrp">${t}</div>`+a.map(i=>row(S.npcs[i],i)).join(''):'';
+  list.innerHTML=grp('随行',fol)+grp(`在${jieName()}`,near)+grp('远在别界',away)+grp('已故',dead);
   const liveN=S.npcs.filter(x=>x.alive).length, goneN=S.npcs.length-liveN;
   const st=S.stats||{};
   list.insertAdjacentHTML('beforeend',
@@ -5522,7 +5615,11 @@ function showNpc(n){
     S.vendettas=S.vendettas.filter(v=>v.heat>0);
     renderPanel(); saveGame(); showNpc(n);
   };
-  $('npcTalkBtn').disabled=!n.alive||S.over; $('npcDuelBtn').disabled=!n.alive||S.over;
+  const here=npcHere(n);
+  if(!here&&n.alive) $('npcMBody').insertAdjacentHTML('afterbegin',`<div class="secret" style="color:var(--ink-soft)">此人远在${esc(n.realm)}，得经轮枢过去才见得着。</div>`);
+  if(n.alive&&here) $('npcMBody').insertAdjacentHTML('beforeend',`<div class="nrow"><b>随行</b><span>${n.follow?'跟在你身边，换界时一道走':'不跟你走'}　<button class="mbtn" id="npcFollowBtn" style="padding:3px 10px;font-size:13px">${n.follow?'让他留下':'带在身边'}</button></span></div>`);
+  const fb=$('npcFollowBtn'); if(fb) fb.onclick=()=>{ setFollow(n,!n.follow); renderPanel(); saveGame(); showNpc(n); };
+  $('npcTalkBtn').disabled=!n.alive||S.over||!here; $('npcDuelBtn').disabled=!n.alive||S.over||!here;
   $('npcTalkBtn').onclick=()=>openConvo(n);
   $('npcDuelBtn').onclick=()=>{ if(busy||S.over) return; $('npcMask').classList.remove('on'); startDuel(n,{friendly:true,lethal:false,reason:`你向${n.name}提出切磋`,action:`向${n.name}提出切磋，二人动手比试`}); };
   $('npcMask').classList.add('on');
@@ -5925,6 +6022,20 @@ let liveChapter=null;
 let lastEngineNews=null;
 let lastDeathSaved=null;
 let idbOk=true;
+// 每一回的抬头都写明主角在哪一界、哪个地方，签条用那一界的颜色——往回翻也看得出这一段是在哪儿过的
+function whereStamp(){
+  if(!S||!S.player) return '';
+  const j=jie();
+  let at=(S.scene&&S.scene.location)||'';
+  if(jieName()==='幽墟') at=`第${layerOf().n}层·${layerOf().name}`+(at&&at.indexOf(layerOf().name)<0?'·'+at:'');
+  return `${j.sigil} ${j.name}${at?' · '+at:''}`;
+}
+function stampChapter(div){
+  if(!div||!S||!S.player) return;
+  const m=div.querySelector('.chapmark'), t=div.querySelector('.chaptime');
+  if(m){ m.style.background=jie().tint; }
+  if(t){ t.textContent=`${whereStamp()}　${S.date||''}`; }
+}
 function beginChapter(label, dateStr, action, judge){
   const div=document.createElement('div');
   div.className='chapter';
@@ -5933,6 +6044,7 @@ function beginChapter(label, dateStr, action, judge){
     ${diceHtml(judge)}
     <div class="ntext"><p style="color:var(--ink-soft)">……</p></div>`;
   $('story').appendChild(div);
+  stampChapter(div);
   liveChapter=div;
   div.scrollIntoView({behavior:'smooth',block:'end'});
   return div;
@@ -5942,9 +6054,15 @@ function updateChapterNarrative(text){
   liveChapter.querySelector('.ntext').innerHTML=narrativeHtml(text)||'<p style="color:var(--ink-soft)">……</p>';
   $('story').scrollTop=$('story').scrollHeight;
 }
+// 人间琐记只留眼前这一界的人：提到远在别界的旧识、又没说明是哪一界传来的，就不上墙
+function hereEvents(list){
+  const away=(S.npcs||[]).filter(n=>n&&n.name&&n.alive&&!npcHere(n));
+  return asArr(list).filter(t=>!away.some(n=>t.indexOf(n.name)>=0&&t.indexOf(n.realm||'')<0));
+}
 function finishChapter(d, judge, duelData){
   if(!liveChapter) return;
   liveChapter.querySelector('.chaptime').textContent=d.date||S.date||'';
+  stampChapter(liveChapter);
   // 自由输入时模型自判的 check 补进骰子栏
   if(judge&&!judge.check&&d.check&&d.check.type){
     const c=d.check, bar=liveChapter.querySelector('.dicebar');
@@ -5955,7 +6073,7 @@ function finishChapter(d, judge, duelData){
   if(duelData){ extra+=`<div class="duelblock"><h4>⚔ 比武实录 · ${esc(duelData.opp.name)}</h4>${duelData.log.map(r=>esc(r.plain)).join('<br>')}<br><b>${esc(duelData.resultText)}</b></div>`; }
   extra+=listBlock('世事变迁',lastEngineNews,'');
   lastEngineNews=null;
-  extra+=listBlock('人间琐记',d.npcEvents,'');
+  extra+=listBlock('人间琐记',hereEvents(d.npcEvents),'');
   extra+=listBlock('宿命',questLines(d),'questblock');
   extra+=listBlock('起居注（数值变化）',changeLines(d),'changeblock');
   extra+=listBlock('风闻',d.rumors,'rumorblock');
@@ -6353,6 +6471,19 @@ async function act(action, opt){
     const n=findNpc(opt.duel.opponent);
     if(n&&n.alive){ startDuel(n,{lethal:!!opt.duel.lethal,reason:action,action,judge:makeJudge(null,action)}); return; }
   }
+  if(!(opt&&opt.crossed)){
+    const want=travelIntent(action);
+    if(want){
+      const leg=travelLeg(want);
+      const q=crossQuote(leg);
+      if(q.ok){
+        if(leg!==want) news(`三界之间不直达，要去${want}得在轮枢转一程——主角先到了轮枢`);
+        await crossRealm(leg, action);
+        return;
+      }
+      news(`主角想去${want}，没走成：${q.why}。人仍在${jieName()}，剧情要写清是被什么挡住的，不许把他写到${want}去`);
+    }
+  }
   const j=makeJudge(opt,action);
   if(!opt||!opt.check) j.freeAttr=guessAttr(action);   // 自由输入：属性由引擎挑，不让模型自己挑顺手的
   await runTurn(action, j, {});
@@ -6361,7 +6492,7 @@ async function act(action, opt){
 async function runTurn(action, judge, extra){
   extra=extra||{};
   $('choices').innerHTML='';
-  setBusy(true, extra.duelData?'刀光剑影，正在记下这一战……':'笔走龙蛇，正在推演万界……');
+  setBusy(true, extra.duelData?'刀光剑影，正在记下这一战……':`笔走龙蛇，正在推演${jieName()}……`);
   beginChapter('第 '+cnNum(S.turn)+' 回',S.date,action,judge);
   S.pending={action,judge,duelData:extra.duelData?{opp:extra.duelData.opp,log:extra.duelData.log,resultText:extra.duelData.resultText}:null}; saveGame();
   try{
@@ -6373,6 +6504,7 @@ async function runTurn(action, judge, extra){
     S.engineNews=(S.engineNews||[]).filter(x=>consumedNews.indexOf(x)<0);
     if(consumedNews.length) lastEngineNews=consumedNews; else lastEngineNews=null;
     applyTurn(d,action,judge);
+    stampChapter(liveChapter);
     finishChapter(d,judge,extra.duelData);
     renderPanel();
     checkAchievements();

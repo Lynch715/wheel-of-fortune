@@ -52,7 +52,7 @@ ok('面谈给东西也归栏', await page.evaluate(()=>itemCat('武器','断水�
 ok('老档里的隐形栏读档时挪回来', await page.evaluate(()=>{
   const s=JSON.parse(JSON.stringify(S)); s.v=16; s.player.items['丹药']=[{name:'老丹'}]; s.player.items['兵器']=[{name:'老刀'}];
   migrate(s);
-  return s.v===17&&!s.player.items['丹药']&&s.player.items['医药'].some(x=>x.name==='老丹')&&s.player.items['法宝'].some(x=>x.name==='老刀')&&Array.isArray(s.ledgerAt)&&s.ledgerAt.length===s.ledger.length;
+  return s.v===SAVE_VERSION&&!s.player.items['丹药']&&s.player.items['医药'].some(x=>x.name==='老丹')&&s.player.items['法宝'].some(x=>x.name==='老刀')&&Array.isArray(s.ledgerAt)&&s.ledgerAt.length===s.ledger.length;
 }));
 
 console.log('\n【念叨】');
