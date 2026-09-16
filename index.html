@@ -2041,6 +2041,42 @@ async function crossRealm(k, said){
   await act(said?`${said}（引擎已办完过界：从${from}到了${k}）`:`从${from}过界，到${k}来`, {type:'normal',days:(k==='幽墟'||from==='幽墟')?5:15,crossed:true});
   return true;
 }
+/* 阿步：固定人物。玩家这一回合写了「遇见阿步」，他就出现——武功极高的男子，
+   送一百两银子，祝身体健康、万事如意，主角伤病尽愈、修为大涨。一局只送一次，之后再写只露个面。 */
+const ABU_NAME='阿步', ABU_RE=/遇见阿步|遇到阿步|碰见阿步/;
+function meetAbu(){
+  if(!S||!S.player) return;
+  let n=findNpc(ABU_NAME);
+  if(n&&n.name!==ABU_NAME) n=null;
+  if(!n){
+    n=normNpc({name:ABU_NAME, gender:'男', age:40, identity:'游历四方的高人', faction:'散人', alignment:'正派',
+      personality:['豁达','爽朗'], appearance:'布衣草鞋，笑起来眼角有纹，看不出深浅',
+      '修为':Math.max(95,Math.round(WCAP()*0.95)), '谈吐':75, signature:'出手从不过三招', relation:'贵人', '好感度':85,
+      mood:'和气', alive:true, secret:'', notes:'固定人物，玩家写「遇见阿步」时出现'});
+    n.follow=false;
+    S.npcs.push(n);
+  }
+  n.realm=jieName(); n.alive=true; n.lastSeen=S.turn;
+  if(S.abuGift){
+    news(`${ABU_NAME}又出现在主角面前，只是寒暄几句、喝了碗茶就走了，这回没再送东西`);
+    return;
+  }
+  S.abuGift=num(S.turn)||1;
+  const p=S.player;
+  const hp0=num(p.hp), w0=num(p.attributes['修为']);
+  p.money=num(p.money)+100;
+  p.hp=100;
+  const healed=(S.ailments||[]).map(a=>a.name).concat((S.scars||[]).map(x=>x.name));
+  S.ailments=[]; S.scars=[];
+  p.attributes['修为']=clampW(w0+15);
+  rebuildStatus();
+  carryDeltas=Object.assign(carryDeltas||{}, {
+    '家财':100, '气血':100-hp0, '修为':num(p.attributes['修为'])-w0,
+    '伤愈':healed, _got:[`${ABU_NAME}赠银一百两`]
+  });
+  ledger(`遇见${ABU_NAME}，得赠银一百两，伤病尽愈，修为大进`);
+  news(`${ABU_NAME}出现了：一位武功极高的男子，本回合必须让他在剧情里露面。他送了主角一百两银子，祝主角身体健康、万事如意；主角身上的伤${healed.length?`（${healed.join('、')}）`:''}全好了，修为也大涨了一截。这些引擎已经记上，剧情照实写，不要改数目`);
+}
 /* 口头换界：玩家在自由输入或选项里说「去轮枢」「回东荒」「下幽墟」，引擎照过界规则办。
    以前这句话只交给模型写，模型把人写到了别界，引擎还当他在原地——颜色不换，身边还是老界的人。 */
 const REALM_KEYS=['东荒','西陆','樱洲','轮枢','幽墟'];
@@ -4457,12 +4493,12 @@ function applyTurn(d, action, judge){
     if(k==='修为'&&dv>0){ dv=months>=1?Math.min(dv,Math.round(cap*months)):sround(Math.min(dv,cap)*months*1.5); }   // 几天的事按天数折成零头
     else if(dv>0&&months<1){ dv=sround(dv*Math.min(1,months*3)); }                                              // 谈吐学识：长得比修为快些，也按天折
     if(failed&&dv>0) dv=Math.min(dv,1);
-    p.attributes[k]=(k==='修为'?clampW(p.attributes[k]+dv):clamp(p.attributes[k]+dv)); lastDeltas[k]=dv;
+    p.attributes[k]=(k==='修为'?clampW(p.attributes[k]+dv):clamp(p.attributes[k]+dv)); lastDeltas[k]=num(lastDeltas[k])+dv;
   }
   // 气血
   let hpd=num(ch.hp);
   if(judge&&judge.duel) hpd=Math.min(hpd,0); // 比武已由引擎结算气血
-  if(hpd) { p.hp=clamp(p.hp+hpd,0,100); lastDeltas['气血']=hpd; }
+  if(hpd) { p.hp=clamp(p.hp+hpd,0,100); lastDeltas['气血']=num(lastDeltas['气血'])+hpd; }
   if(hpd>=0&&!(judge&&judge.duel)&&p.hp<100){
     // 自然将养：饥寒交迫时几乎养不好伤
     const regen=sround(Math.min(40,(p.hp<30?4:8)*months*(S.destitute?(1-0.75*fdm().starve):1)*(hasScar('暗伤')?0.4:1)));
@@ -4476,7 +4512,7 @@ function applyTurn(d, action, judge){
     let dm=num(ch.money);
     if(failed&&dm>0) dm=0;
     if(dm>0) dm=Math.min(dm,Math.round((fate>=19?3000:600)*Math.max(0.1,months)*fdm().money));   // 防通胀：横财要有来由
-    if(dm){ p.money=Math.max(0,Math.round(p.money+dm)); lastDeltas['家财']=dm; }
+    if(dm){ p.money=Math.max(0,Math.round(p.money+dm)); lastDeltas['家财']=num(lastDeltas['家财'])+dm; }
   }
   // 年龄只由引擎按月推进，模型写什么都不算（规范 v1.1 第 4.4 条）
   if(ch.faction) p.faction=ch.faction;
@@ -6508,6 +6544,7 @@ async function act(action, opt){
     const n=findNpc(opt.duel.opponent);
     if(n&&n.alive){ startDuel(n,{lethal:!!opt.duel.lethal,reason:action,action,judge:makeJudge(null,action)}); return; }
   }
+  if(ABU_RE.test(action)) meetAbu();
   if(!(opt&&opt.crossed)){
     const want=travelIntent(action);
     if(want){
