@@ -384,7 +384,7 @@ ok('v11 升到 v12，局势从平常起步', await page.evaluate(()=>{
   const s={v:11,realm:'东荒',homeRealm:'东荒',months:0,wheelTurns:4,npcs:[],forged:['东荒'],
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0},player:{name:'甲',items:{},attributes:{'修为':10},'声望':10}};
   migrate(s);
-  return s.v>=14&&s.loreSeen===0&&!!s.ties&&Object.values(s.ties).every(v=>v===50)&&s.voidP===20&&!!s.lords&&!('wheelTurns' in s)&&s.v===16
+  return s.v>=14&&s.loreSeen===0&&!!s.ties&&Object.values(s.ties).every(v=>v===50)&&s.voidP===20&&!!s.lords&&!('wheelTurns' in s)&&s.v===17
       &&s.abyssMonths===0&&Array.isArray(s.bossKilled)&&!('outerHeads' in s)&&s.outerBeaten===false;
 }));
 

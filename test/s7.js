@@ -100,12 +100,12 @@ ok('界门卡上挂着吞噬者', await page.evaluate(()=>{ renderGate(); return
 ok('侵蚀度重度的人，魔潮里受伤机会翻倍（不报错就算）', await page.evaluate(()=>{ S.erosion=8; S.realm='樱洲'; voidTide(); S.erosion=0; S.realm='轮枢'; return true; }));
 
 console.log('\n【存档】');
-ok('v14 老档升到 v16：轮转字段删掉、幽墟里的人落在第一层、期限落在开门月', await page.evaluate(()=>{
+ok('v14 老档升到 v17：轮转字段删掉、幽墟里的人落在第一层、期限落在开门月', await page.evaluate(()=>{
   const s={v:14,realm:'幽墟',homeRealm:'东荒',months:7,wheelTurns:3,wheelNext:30,gateCloseAt:9,gateOpen:true,lordPolicy:'打邻居',abyssRolls:3,outerHeads:['噬渊'],
     npcs:[],forged:['东荒','幽墟'],ties:{'东荒-西陆':50,'东荒-樱洲':50,'西陆-樱洲':50},voidP:30,lords:{},loreSeen:1,
     world:{factions:[{name:'云台观',realm:'东荒',power:50,leader:'x'}],ranking:[],events:[],fallen:[],vacant:0},player:{name:'甲',items:{},attributes:{'修为':10},'声望':10}};
   migrate(s);
-  return s.v===16&&!('wheelNext' in s)&&!('wheelTurns' in s)&&s.gateOpen===false&&s.lordPolicy===null
+  return s.v===17&&!('wheelNext' in s)&&!('wheelTurns' in s)&&s.gateOpen===false&&s.lordPolicy===null
     &&s.abyssLayer===1&&monthIdx(s.abyssDue)===11&&s.erosion===3&&s.bossKilled.length===1
     &&s.world.factions.some(f=>f.name==='云台观')&&s.world.factions.some(f=>f.name==='玄门·玉清');
 }));
