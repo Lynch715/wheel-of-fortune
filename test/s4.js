@@ -65,7 +65,7 @@ await page.click('#crStart');
 await page.waitForSelector('#choices .opt',{timeout:25000});
 
 console.log('\n【头像落桶】');
-ok('图集是 10×9、82 张', await page.evaluate(()=>AV_COLS===10&&AV_ROWS===9&&AV_SLOTS.length===82));
+ok('图集是 10×9、90 张（v3.0 加了八个幽墟头目）', await page.evaluate(()=>AV_COLS===10&&AV_ROWS===9&&AV_SLOTS.length===90&&Object.values(BOSS_AV).every(k=>AV_SLOTS.includes(k))));
 ok('主角有画像且是东荒的桶', await page.evaluate(()=>/^d[1-4][mf]_0[12]$/.test(S.player.avatar)));
 ok('面板上的脸用的是图集，不是墨影', await page.evaluate(()=>{
   const bg=document.querySelector('#pFace .avatar').style.backgroundImage||'';
@@ -114,9 +114,10 @@ ok('v3.0 批 A 十二张都到了，不再借图', await page.evaluate(()=>Objec
 ok('八张新机制横幅都接上了', await page.evaluate(()=>
   ['sc_d_tide','sc_w_tide','sc_s_tide','sc_war','sc_court','sc_h_oracle','sc_a_bone','sc_a_forest']
     .every(k=>SCENE_IMG[k])));
-ok('十八张立绘都在', await page.evaluate(()=>Object.keys(POR_IMG).length===18));
+ok('十九张立绘都在', await page.evaluate(()=>Object.keys(POR_IMG).length===19&&!!POR_IMG['x_fallen_angel']));
 ok('十七种特型各有一张立绘', await page.evaluate(()=>
-  AV_SLOTS.filter(x=>x.charAt(0)==='x').every(k=>k==='x_child'||POR_IMG[k])));
+  AV_SLOTS.filter(x=>x.charAt(0)==='x'&&!Object.values(BOSS_AV).includes(x)).every(k=>k==='x_child'||POR_IMG[k])));
+ok('头目认脸：路西法用堕天使那张，没立绘的头目退回小头像', await page.evaluate(()=>avSlotOf({name:'路西法',avatar:'x_abyss'})==='x_fallen_angel'&&!!porOf({name:'路西法'})&&!porOf({name:'妲己'})&&avSlotOf({name:'妲己'})==='x_fox'));
 await page.evaluate(()=>{ S.scene.location='云台观山门'; renderScene(); });
 await page.waitForTimeout(300);
 ok('正文区真的铺上了淡背景', await page.evaluate(()=>{

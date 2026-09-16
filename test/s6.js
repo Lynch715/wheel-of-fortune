@@ -113,7 +113,7 @@ console.log('\n【开门那两个月】');
 ok('门一开，压力先顶上来一截', await page.evaluate(()=>{
   S.gateOpen=false; S.voidP=30; S.months+= (5-monthIdx()+12)%12;
   gateTick();
-  return S.gateOpen===true&&S.voidP>=40;
+  return S.gateOpen===true&&S.voidP>=39;             // 30 + 至少 6 + 魔潮 3
 }));
 ok('起了魔潮，记进旧账，轻重看压力', await page.evaluate(()=>
   num(S.tideSev)>=1&&S.ledger.some(x=>/魔劫|魔潮|百鬼夜行/.test(x))));
