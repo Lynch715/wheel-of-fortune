@@ -98,7 +98,7 @@ ok('同一个人每次同一张脸', await page.evaluate(()=>{
 console.log('\n【界门说明】');
 await page.evaluate(()=>openCross()); await page.waitForTimeout(250);
 const gr=await page.textContent('.gaterule');
-ok('规则只剩两句，不再是说明书', gr.includes('轮枢常年通着')&&gr.includes('两趟盘缠')&&gr.length<130);
+ok('规则只剩两句，不再是说明书', gr.includes('经轮枢转')&&gr.length<130);
 ok('过界弹窗不再提前灌幽墟那一大段', !gr.includes('引荐状')&&!gr.includes('侵蚀')&&!gr.includes('不可投胎'));
 ok('副标题只说人在哪儿', (await page.textContent('#crossSub')).length<20);
 await page.evaluate(()=>$('crossMask').classList.remove('on')); await page.waitForTimeout(150);
@@ -109,7 +109,8 @@ ok('东荒市镇 → 市镇', await page.evaluate(()=>{ S.scene.location='山下
 ok('界门不分界都用界门那张', await page.evaluate(()=>{ S.scene.location='界门之前'; return sceneKey()==='sc_h_gate'; }));
 ok('樱洲学园 → 校舍', await page.evaluate(()=>{ const r=S.realm; S.realm='樱洲'; S.scene.location='星见学园的教室'; const k=sceneKey(); S.realm=r; return k==='sc_s_school'; }));
 ok('西陆酒馆 → 酒馆', await page.evaluate(()=>{ const r=S.realm; S.realm='西陆'; S.scene.location='城里的酒馆'; const k=sceneKey(); S.realm=r; return k==='sc_w_tavern'; }));
-ok('二十六张场景都在', await page.evaluate(()=>Object.keys(SCENE_IMG).length===26));
+ok('三十八张场景都在', await page.evaluate(()=>Object.keys(SCENE_IMG).length===38));
+ok('v3.0 批 A 十二张都到了，不再借图', await page.evaluate(()=>Object.keys(SCENE_FALLBACK).every(k=>SCENE_IMG[k])));
 ok('八张新机制横幅都接上了', await page.evaluate(()=>
   ['sc_d_tide','sc_w_tide','sc_s_tide','sc_war','sc_court','sc_h_oracle','sc_a_bone','sc_a_forest']
     .every(k=>SCENE_IMG[k])));

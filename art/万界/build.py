@@ -75,7 +75,7 @@ if os.path.isdir(A+'/portraits'):
 
 js=[]
 js.append('/* ================= 美术资产（S4 接入，由 art/ 下的原图压出来） ================= */')
-js.append('const AV_CELL=%d, AV_COLS=%d, AV_ROWS=%d;'%(CELL,COLS,ROWS))
+js.append('const AV_CELL=%d, AV_COLS=%d, AV_ROWS=%d, AV_ZOOM=1.04;'%(CELL,COLS,ROWS))   # AV_ZOOM：头像框放大 4%%，裁掉格子边的串色
 js.append('const AV_SLOTS='+json.dumps(names,ensure_ascii=False)+';')
 js.append("const AV_SHEET='"+b64(AV)+"';")
 js.append('const AV_DESC='+json.dumps({n:desc.get(n,'') for n in names},ensure_ascii=False)+';')

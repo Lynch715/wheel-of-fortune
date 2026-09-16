@@ -55,7 +55,7 @@ ok('头一回跨界就背上了那桩跨界宿命', await page.evaluate(()=>
 ok('门没开时幽墟仍下不去', await page.evaluate(()=>{
   S.gateOpen=false;
   const t=crossTargets().find(x=>x.key==='幽墟');
-  return !!t&&t.ok===false&&t.why.includes('轮转开门那两个月');
+  return !!t&&t.ok===false&&/才开，还有 \d+ 个月/.test(t.why);
 }));
 ok('门开了就下得去，价钱是常规那趟的三倍', await page.evaluate(()=>{
   S.gateOpen=true; S.gateCloseAt=S.months+2;
@@ -74,7 +74,8 @@ ok('求引荐要花钱，成了就落一张引荐状', await page.evaluate(()=>{
   S.player.attributes['悟性']=95; S.player['声望']=80;      // 判定必成，只看流程
   S.player.money=Math.max(num(S.player.money),2000);        // 香火钱按声望浮动，别让出身穷把这条卡掉
   const before=S.player.money;
-  seekAbyssPass();
+  const r0=Math.random; Math.random=()=>0.99;               // 天命骰掷出 1 会大失败，钉死它
+  seekAbyssPass(); Math.random=r0;
   return S.player.money<before && !!abyssPass() && S.ledger.some(x=>/求得引荐状/.test(x));
 }));
 ok('有了引荐状就不必翻倍', await page.evaluate(()=>crossCost('幽墟')===360));
@@ -87,7 +88,7 @@ ok('幽墟的规矩要点了它才说，不提前灌', await page.evaluate(()=>{
   const ask=document.querySelector('.crossask');
   const t=ask?ask.textContent:'';
   $('crossMask').classList.remove('on');
-  return before===false&&!!ask&&t.includes('每三个月磨你一次')&&t.includes('两倍')&&!!document.getElementById('askGo');
+  return before===false&&!!ask&&t.includes('每三个月磨你一次')&&t.includes('扔回轮枢')&&!!document.getElementById('askGo');
 }));
 
 console.log('\n【下去】');
@@ -103,7 +104,7 @@ ok('出身界仍是西陆，境界还按斗气那条路排', await page.evaluate
 ok('界门卡把倒计时顶在最上面', await page.evaluate(()=>{
   S.gateOpen=false; renderGate();
   const t=$('wGate').textContent;
-  return t.indexOf('离下一次界门松动还有')>=0 && t.indexOf('离下一次界门松动还有')<t.indexOf('当界');
+  return t.indexOf('门还有')>=0 && t.indexOf('门还有')<t.indexOf('当界');
 }));
 
 console.log('\n【境内的险】');
@@ -111,9 +112,13 @@ ok('天命骰每回合 −3', await page.evaluate(()=>{
   let mx=0; for(let i=0;i<200;i++) mx=Math.max(mx,fateRoll());
   return mx<=17&&mx>=15;
 }));
-ok('所有门槛 +10', await page.evaluate(()=>
-  abyssDC()===10 && rollCheck('悟性',55).need===Math.max(20,55+diff().dc+10)));
-ok('判定尺子里写明了幽墟这 +10', await page.evaluate(()=>judgeBlock({fate:10,months:1}).includes('另加幽墟的 +10')));
+ok('进来落在第一层外环，门槛 +5', await page.evaluate(()=>
+  S.abyssLayer===1 && abyssDC()===5 && rollCheck('悟性',55).need===Math.max(20,55+diff().dc+5)));
+ok('往下几层门槛跟着涨（+10/+10/+10/+12/+15）', await page.evaluate(()=>{
+  const out=[]; for(let n=2;n<=6;n++){ S.abyssLayer=n; out.push(abyssDC()); } S.abyssLayer=1;
+  return out.join()==='10,10,10,12,15';
+}));
+ok('判定尺子里写明了在第几层、加多少', await page.evaluate(()=>judgeBlock({fate:10,months:1}).includes('另加幽墟第1层的 +5')));
 ok('随心所欲档在幽墟一样会受重伤', await page.evaluate(()=>{
   const f=S.fd_peril; fdSet('peril','free');
   const zero=fdm().injury===0;                 // 这一档本来免伤
@@ -127,19 +132,103 @@ ok('但仍然不会因为剧情死', await page.evaluate(()=>{
   const f=S.fd_peril; fdSet('peril','free'); const d=fdm().storyDeath; fdSet('peril',f); return d===0;
 }));
 
-console.log('\n【侵蚀】');
-ok('每连着待满三个月掷一次，越待越难', await page.evaluate(()=>{
-  S.player.attributes['悟性']=1;                 // 必败，看后果
-  S.abyssSince=S.months-9; S.abyssRolls=0;
-  const s0=(S.scars||[]).length, p0=(S.player.personality||[]).slice();
-  abyssTick();
-  const changed=((S.scars||[]).length>s0) || (S.player.personality||[]).join()!==p0.join();
-  return S.abyssRolls===3 && changed && S.ledger.concat(S.engineNews||[]).some(x=>/侵蚀|啃下一块/.test(x));
+console.log('\n【侵蚀度】');
+ok('外环不掷侵蚀', await page.evaluate(()=>{
+  S.abyssLayer=1; S.erosion=0; S.erosionClock=0; S.player.attributes['悟性']=1;
+  for(let i=0;i<6;i++) erosionMonth();
+  return S.erosion===0;
 }));
-ok('待够之前不掷', await page.evaluate(()=>{
-  S.abyssSince=S.months-2; S.abyssRolls=0; abyssTick();
-  return S.abyssRolls===0;
+ok('蚀骨荒原每两个月掷一次，失败 +1', await page.evaluate(()=>{
+  S.abyssLayer=2; S.erosion=0; S.erosionClock=0;
+  const r0=Math.random; Math.random=()=>0.3;
+  erosionMonth(); const a=S.erosion; erosionMonth(); const b=S.erosion;
+  Math.random=r0;
+  return a===0&&b===1;
 }));
+ok('第三层起每三个月掷一次，失败 +2', await page.evaluate(()=>{
+  S.abyssLayer=3; S.erosion=1; S.erosionClock=0;
+  const r0=Math.random; Math.random=()=>0.3;
+  erosionMonth(); erosionMonth(); const a=S.erosion; erosionMonth();
+  Math.random=r0;
+  return a===1&&S.erosion===3&&S.ledger.some(x=>/侵蚀度 1→3/.test(x));
+}));
+ok('跨进中度：添一条性情，练功打七折', await page.evaluate(()=>{
+  const p0=(S.player.personality||[]).join();
+  erosionAdd(1);
+  return S.erosion===4&&(S.player.personality||[]).join()!==p0&&foreignPenalty().grow<foreignPenalty0().grow;
+}));
+ok('跨进重度：再添一条性情、落一条旧伤；三界里谈吐门槛 +10', await page.evaluate(()=>{
+  const s0=(S.scars||[]).length; erosionAdd(3);
+  const hurt=(S.scars||[]).length===s0+1;
+  const r=S.realm; S.realm='东荒';
+  const a=rollCheck('谈吐',55).need; S.erosion=0; const b=rollCheck('谈吐',55).need; S.erosion=7; S.realm=r;
+  return S.erosion===7&&hurt&&a===b+10;
+}));
+ok('状态栏挂着侵蚀度', await page.evaluate(()=>{ rebuildStatus(); return S.player.status.includes('侵蚀度7'); }));
+ok('提示词里有侵蚀度那一行（不叫「层」）', await page.evaluate(()=>{ const l=erosionLine(); return l.startsWith('【侵蚀度】7（重度）')&&!/7层/.test(l); }));
+ok('随心所欲档封顶 9，不会堕化', await page.evaluate(()=>{
+  const f=S.fd_peril; fdSet('peril','free'); erosionAdd(10); const a=S.erosion; fdSet('peril',f);
+  return a===9&&!S.erosionFall;
+}));
+ok('另两档到 10 就堕化', await page.evaluate(()=>{
+  erosionAdd(1); const a=S.erosion===10&&S.erosionFall===true; S.erosionFall=false; S.erosion=7; return a;
+}));
+ok('带着护心之物不掷', await page.evaluate(()=>{
+  S.abyssLayer=2; S.erosionClock=1; const e=S.erosion;
+  S.player.items['其他']=S.player.items['其他']||[]; S.player.items['其他'].push({name:'圣徒遗骨匣',ward:true});
+  const r0=Math.random; Math.random=()=>0.3; erosionMonth(); Math.random=r0;
+  const ok1=hasWard()&&S.erosion===e;
+  S.player.items['其他']=S.player.items['其他'].filter(x=>!x.ward);
+  return ok1;
+}));
+ok('上去以后：中度以下每六个月退 1，重度不退', await page.evaluate(()=>{
+  const r=S.realm; S.realm='轮枢';
+  S.erosion=5; S.erosionCalm=0; for(let i=0;i<12;i++) erosionMonth(); const a=S.erosion;
+  S.erosion=8; for(let i=0;i<12;i++) erosionMonth(); const b=S.erosion;
+  S.realm=r; S.erosion=0;
+  return a===3&&b===8;
+}));
+
+console.log('\n【六层】');
+ok('往下要过一次修为判定，过了就到下一层', await page.evaluate(async()=>{
+  S.abyssLayer=1; S.player.attributes['修为']=200; S.abyssDue=nextGateAfter(S.months+96); S.erosion=0;
+  S.player.items['其他'].push({name:'试用护符',ward:true});
+  const r0=Math.random; Math.random=()=>0.9;
+  abyssMove(1); Math.random=r0;
+  return S.abyssLayer===2&&S.ledger.some(x=>/下到幽墟第2层·蚀骨荒原/.test(x));
+}));
+await idle();
+ok('卡上写着第几层、有上下两个按钮', await page.evaluate(()=>{
+  renderGate(); const t=$('wGate').textContent;
+  return t.includes('第 2 层·蚀骨荒原')&&!!$('btnUp')&&!!$('btnDown');
+}));
+ok('提示词写了本层和本层头目', await page.evaluate(()=>{
+  const b=bossBlock(); return b.includes('【幽墟·第2层】蚀骨荒原')&&b.includes('别西卜｜蝇王')&&!b.includes('波旬');
+}));
+ok('不在第一层出不去', await page.evaluate(()=>{
+  S.gateOpen=true; const t=crossTargets()[0]; S.gateOpen=false;
+  return t.ok===false&&t.why.includes('第一层');
+}));
+ok('第五层下不去，要先过吞噬者', await page.evaluate(()=>{
+  S.abyssLayer=5; S.coreOpen=false; renderGate();
+  const has=!!$('btnDevour')&&!$('btnDown');
+  abyssMove(1);
+  return has&&S.abyssLayer===5;
+}));
+ok('胜过吞噬者门就开了；到了墟心记一笔', await page.evaluate(async()=>{
+  S.coreOpen=true; S.player.attributes['修为']=200;
+  const r0=Math.random; Math.random=()=>0.9; abyssMove(1); Math.random=r0;
+  return S.abyssLayer===6&&S.reachedCore===true&&S.ledger.some(x=>/抵达墟心/.test(x));
+}));
+await idle();
+ok('横幅跟着层走', await page.evaluate(()=>{
+  const out=[]; for(let n=1;n<=6;n++){ S.abyssLayer=n; out.push(sceneKey()); }
+  return out.join()==='sc_a_rim,sc_a_waste,sc_a_fire,sc_a_street,sc_a_abyss,sc_a_core';
+}));
+ok('往上不判定', await page.evaluate(()=>{ abyssMove(-1); return S.abyssLayer===5; }));
+await idle();
+await page.evaluate(()=>{ S.abyssLayer=1; S.abyssSince=S.months; S.player.items['其他']=S.player.items['其他'].filter(x=>x.name!=='试用护符'); });
+ok('一路上没被丢出去', await page.evaluate(()=>S.realm==='幽墟'));
 
 console.log('\n【幽墟器物】');
 ok('幽墟得来的东西一律打上印记', await page.evaluate(()=>{
@@ -168,15 +257,12 @@ ok('丢了就停', await page.evaluate(()=>{
 
 console.log('\n【名录只给半套】');
 let jb=await page.evaluate(()=>jieBlock());
-ok('五支势力都在', jb.includes('噬渊族')&&jb.includes('蚀骨族')&&jb.includes('幻面族')&&jb.includes('枯骨庭')&&jb.includes('堕落者'));
+ok('三支魔族与堕落者都在，六层写全', jb.includes('噬渊')&&jb.includes('蚀骨')&&jb.includes('幻面')&&jb.includes('堕落者')&&!jb.includes('枯骨庭')&&['幽墟外环','蚀骨荒原','业火熔渊','百鬼夜行街','无光海','墟心'].every(x=>jb.includes(x)));
 ok('没有自己的修行体系', jb.includes('幽墟没有自己的修行体系')&&!jb.includes('本界的境界由低到高'));
 ok('写明主角修的仍是西陆那一套', jb.includes('他是西陆人')||jb.includes('西陆来的异界人'));
 ok('写明这儿问得到别处问不到的事', jb.includes('别处问不到的事')&&jb.includes('rumors'));
 ok('地名表挂上了横幅', await page.evaluate(()=>{
-  const l=S.scene.location; S.scene.location='无光渊'; const k=sceneKey();
-  S.scene.location='枯骨庭'; const k2=sceneKey();
-  S.scene.location='蚀心林'; const k3=sceneKey(); S.scene.location=l;
-  return k==='sc_a_abyss'&&k2==='sc_a_bone'&&k3==='sc_a_forest';
+  return placeScene('无光海')==='sc_a_abyss'&&placeScene('百鬼夜行街')==='sc_a_street'&&placeScene('幽墟外环')==='sc_a_rim'&&placeScene('墟心')==='sc_a_core'&&!placeScene('枯骨庭');
 }));
 
 ok('幽墟不入万界榜', await page.evaluate(()=>
@@ -203,14 +289,16 @@ ok('幽墟只有轮枢那一道门', await page.evaluate(()=>{
   const l=crossTargets();
   return l.length===1&&l[0].key==='轮枢';
 }));
-ok('门关着就雇走私客，价钱是下来那趟的两倍', await page.evaluate(()=>{
+ok('门关着上不去，没有走私客那条路了', await page.evaluate(()=>{
   S.gateOpen=false;
-  return crossCost('轮枢')===num(S.abyssPaid)*2;
+  const t=crossTargets()[0];
+  return t.ok===false&&/才开/.test(t.why);
 }));
-ok('赶上开门就照常价走人', await page.evaluate(()=>{
-  S.gateOpen=true; S.gateCloseAt=S.months+2;
-  return crossCost('轮枢')===120;
+ok('赶上开门就不花钱走人', await page.evaluate(()=>{
+  S.gateOpen=true;
+  return crossCost('轮枢')===0&&crossTargets()[0].ok===true;
 }));
+ok('下来时就记了期限：下一个开门月', await page.evaluate(()=>S.abyssDue!=null&&isGateMonth(S.abyssDue)));
 
 console.log('\n【正文没漏别界的词】');
 await page.evaluate(()=>{ S.gateOpen=false; });

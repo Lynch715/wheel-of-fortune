@@ -70,7 +70,7 @@ ok('【当界名录】只写当界（不带别界的名录）', !jb.includes('�
 ok('名录含东荒境界表', init.includes('炼气 → 筑基 → 金丹'));
 ok('名录含东荒称呼表', init.includes('道友'));
 ok('风闻改成本界+轮枢两条', init.includes('轮枢传来的异界风闻'));
-ok('万界榜跨界条款在', init.includes('跨界挑战要等轮转开界门'));
+ok('万界榜跨界条款在', init.includes('要经轮枢过去找'));
 
 console.log('\n【引擎】');
 ok('存档记下了界', await page.evaluate(()=>S.realm==='东荒'));

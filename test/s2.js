@@ -60,14 +60,17 @@ let lk=LEAK['西陆'].filter(w=>bd.includes(w));
 ok('西陆正文无跨界泄漏'+(lk.length?'（'+lk.join('、')+'）':''), lk.length===0);
 ok('功法词卫按西陆换词', await page.evaluate(()=>normArt({name:'金丹一击',desc:'以灵气为引',style:'刚猛',level:20}).name==='高阶一击'));
 
-console.log('\n【界门与轮转】');
-ok('界门卡在万界页签上', (await page.textContent('#wGate')).includes('界门'));
+console.log('\n【幽墟之门按日历开】');
+ok('界门卡在万界页签上', (await page.textContent('#wGate')).includes('幽墟之门'));
+ok('轮转那一套彻底没了', await page.evaluate(()=>typeof wheelTick==='undefined'&&typeof wheelPeriod==='undefined'&&!('wheelNext' in S)&&!('wheelTurns' in S)));
+ok('只有六月、十二月是开门月', await page.evaluate(()=>[0,1,2,3,4,5,6,7,8,9,10,11].filter(m=>isGateMonth(m)).join()==='5,11'));
 const before=await page.evaluate(()=>S.gateOpen);
-await page.evaluate(()=>{ S.wheelNext=S.months; });
+await page.evaluate(()=>{ S.gateOpen=false; while(!isGateMonth(S.months+1)) S.months++; });
 await page.click('#choices .opt'); await idle();
-ok('时间走过轮转点，界门开了', !before && await page.evaluate(()=>S.gateOpen===true));
-ok('轮转记进了账', await page.evaluate(()=>S.ledger.some(x=>x.includes('界门开'))));
-ok('异界来客/风声写进了引擎消息或旧账', await page.evaluate(()=>S.ledger.concat(S.engineNews||[]).some(x=>/异界来客|界门|轮转/.test(x))));
+ok('时间走到开门月，门开了', !before && await page.evaluate(()=>S.gateOpen===true));
+ok('开门记进了账', await page.evaluate(()=>S.ledger.some(x=>x.includes('幽墟之门开'))));
+ok('三界之间不直达，要经轮枢', await page.evaluate(()=>{ const t=crossTargets(); const e=t.find(x=>x.key==='东荒'); const h=t.find(x=>x.key==='轮枢'); return !!e&&e.ok===false&&e.why.includes('先去轮枢')&&h.ok===true; }));
+ok('异界来客/风声写进了引擎消息或旧账', await page.evaluate(()=>S.ledger.concat(S.engineNews||[]).some(x=>/异界来客|幽墟/.test(x))));
 
 console.log('\n【过界到轮枢】');
 const before2=await page.evaluate(()=>({m:S.player.money,n:S.npcs.length}));
@@ -151,7 +154,7 @@ ok('地名表里的地名直接对上横幅', await page.evaluate(()=>{
   S.realm=r; S.scene.location=l;
   return k==='sc_w_tavern' && k2==='sc_s_school';
 }));
-ok('提示词没胖失控（开局那回 <14500 字）', await page.evaluate(()=>turnPrompt('试试',{fate:10,months:1}).length<14500));
+ok('提示词没胖失控（开局那回 <16000 字，v3.0 名录加了势力人物）', await page.evaluate(()=>turnPrompt('试试',{fate:10,months:1}).length<16000));
 
 console.log('\n【v1.1 口径】');
 ok('轮枢随时可去，不看轮转', await page.evaluate(()=>{
@@ -159,7 +162,7 @@ ok('轮枢随时可去，不看轮转', await page.evaluate(()=>{
   const t=crossTargets().find(x=>x.key==='轮枢'); S.gateOpen=g;
   return !!t&&t.ok===true;
 }));
-ok('过界说明只留两句，写明可以借轮枢中转', await page.evaluate(()=>{ openCross(); const t=document.querySelector('.gaterule').textContent; $('crossMask').classList.remove('on'); return t.includes('先去轮枢，再转过去')&&t.length<130; }));
+ok('过界说明只留两句，写明可以借轮枢中转', await page.evaluate(()=>{ openCross(); const t=document.querySelector('.gaterule').textContent; $('crossMask').classList.remove('on'); return t.includes('经轮枢转')&&t.includes('六月、十二月')&&t.length<130; }));
 ok('仇家隔着界恨涨得慢，不是冻住', await page.evaluate(()=>{
   const n=S.npcs[0]; n.realm='东荒'; S.realm='樱洲';
   S.vendettas=[{name:n.name,reason:'试',heat:10,cool:0}];
@@ -217,9 +220,9 @@ ok('人不在轮枢时幽墟下不去', await page.evaluate(()=>{
   return !!t&&t.ok===false&&t.why.includes('得先到轮枢');
 }));
 ok('公会字母等级进了白名单', await page.evaluate(()=>lawBlock().includes('F/D/C/B/A/S')));
-ok('宗教措辞改成「换名的影子」', await page.evaluate(()=>{
+ok('现实宗教与小说人物放开（v3.0）', await page.evaluate(()=>{
   const l=lawBlock();
-  return l.includes('尽管放开写')&&l.includes('换了名字的影子')&&l.includes('在世的真实人物');
+  return l.includes('小说里的角色可以写进来')&&!l.includes('换了名字的影子')&&l.includes('可以有阴谋暗线');
 }));
 ok('表字爵位绰号可用但不可现编', await page.evaluate(()=>lawBlock().includes('不可现编一个面板上没有的')));
 
