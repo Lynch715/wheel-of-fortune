@@ -241,6 +241,10 @@ body{
 .courtbar{height:76px;margin:-2px -2px 8px;border-radius:6px;background-size:cover;background-position:center 62%;
   box-shadow:inset 0 -28px 34px -18px var(--paper)}
 #jieNote{font-size:12.5px;color:var(--ink-soft);line-height:1.8;margin:0 2px 2px}
+.trrealm{font-size:12px;color:var(--ink-soft);letter-spacing:2px;margin:8px 0 3px}
+.tritem{padding:3px 6px;border-bottom:1px dashed var(--paper-edge);font-size:13px}
+.tritem small{margin-left:6px;color:var(--accent)}
+.tritem.unk{color:var(--ink-faint);letter-spacing:3px}
 .npcgrp{font-size:12px;color:var(--ink-soft);letter-spacing:2px;margin:10px 2px 4px;border-bottom:1px dashed var(--paper-edge);padding-bottom:2px}
 .npcgrp:first-child{margin-top:0}
 .npc.faraway{opacity:.55}
@@ -577,6 +581,7 @@ body{
       <div class="card" id="loreCard"><h3>❈ 万界 <small>你活在个什么地方</small><span class="lotog" id="loreTog"></span></h3><div id="loreBody" class="lore"></div></div>
       <div class="card"><h3>❈ 界门 <small>轮枢与幽墟</small></h3><div id="wGate"></div></div>
       <div class="card"><h3>❈ 宿命 <small>你此生要追的事</small></h3><div id="wQuests"></div></div>
+      <div class="card" id="treasureCard"><h3>❈ 珍宝录 <small id="treasureSub"></small></h3><div id="treasureList"></div></div>
       <div class="card" id="outerCard" style="display:none"><h3>☠ 轮外之物 <small id="outerSub"></small></h3><div id="outerList"></div></div>
       <div class="card"><h3>❈ 万界榜 <small>当世高手</small></h3><div id="wRanking"></div></div>
       <div class="card"><h3>❈ 势力格局</h3><div id="wFactions"></div></div>
@@ -833,7 +838,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=20;
+const SAVE_VERSION=21;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -842,7 +847,7 @@ function newStateShell(){
     realm:'东荒', homeRealm:'东荒', realmSince:0, realmLog:[], gateOpen:false, abyssDue:null, lordMonths:0,
     months:0, day:0, ganzhi:0, upkeepLast:0, destitute:false, starveMonths:0, oldAgeDeath:false,
     abyssSince:null, abyssRolls:0, abyssPaid:0, abyssFreed:false,
-    vendettas:[], scars:[], ailments:[], engineNews:[], newsSeen:{}, turnedPage:[], ledgerAt:[], ranked:false, lastChallengeMonth:-99, volumes:[], ledger:[],
+    vendettas:[], scars:[], ailments:[], engineNews:[], newsSeen:{}, treasures:{}, turnedPage:[], ledgerAt:[], ranked:false, lastChallengeMonth:-99, volumes:[], ledger:[],
     memLong:true, loreSeen:0,
     sect:null,
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0}, forged:[],
@@ -1033,6 +1038,15 @@ function migrate(s){
     // 没写加成的法宝补一个
     for(const it of ((s.player&&s.player.items&&s.player.items['法宝'])||[])) fixBonus(it);
     s.v=20;
+  }
+  if(s.v<21){
+    // 珍宝：老档里名字对得上的，补成表里那一件
+    s.treasures=s.treasures||{};
+    for(const c in ((s.player&&s.player.items)||{})) for(const it of (s.player.items[c]||[])){
+      const t=it&&!it.treasure&&treasureOf(it.name);
+      if(t&&!s.treasures[t.key]){ it.treasure=t.key; it.name=t.name; if(t.cat==='法宝') it.bonus=t.bonus||it.bonus; if(t.ward) it.ward=true; if(t.charms) it.charms=t.charms; if(t.fateTwice) it.uses=t.fateTwice; s.treasures[t.key]={state:'held',seen:true}; }
+    }
+    s.v=21;
   }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
@@ -1555,12 +1569,13 @@ function advanceDays(days){
     gateTick();
     worldTick(1);
     erosionMonth();
+    treasureMonth();
   }
   if(n){ tickNpcs(n); sectTick(n); cursedTick(n); }
   S.upkeepLast=cost; S.starveMonths=starve;
   if(n) S.destitute=starve>0;
   if(S.destitute&&n){ p.hp=Math.max(1,p.hp-Math.round(4*starve*fdm().starve)); }
-  const healedNow=tickAilments(days/30);
+  const healedNow=tickAilments(days/30*(hasT('shengbei')?2:1));
   if(healedNow.length){ S.healedLast=(S.healedLast||[]).concat(healedNow); for(const h of healedNow) ledger(`${h}已愈`); }
   rebuildStatus();
   S.date=dateStr();
@@ -1904,7 +1919,7 @@ function gateTick(){
   if(!open&&gateLeft()===2&&!S.gateWarned){ S.gateWarned=true; news('风声起了：再过两个月，幽墟的门就要开'); }
   if(monthIdx()===0) recalcLords();
   lordMonthly();
-  if(S.realm==='幽墟'&&S.abyssDue!=null&&num(S.months)>num(S.abyssDue)&&!S.abyssSafe) abyssEject();
+  if(S.realm==='幽墟'&&S.abyssDue!=null&&num(S.months)>num(S.abyssDue)&&!S.abyssSafe&&!hasT('xuxinyan')) abyssEject();
   // 三界跟轮枢常年通着，异界的人和货总会流进来一些
   if(TIE_REALMS.indexOf(jieName())>=0&&Math.random()<0.08){
     const from=pick(['东荒','西陆','樱洲'].filter(k=>k!==jieName()));
@@ -1988,11 +2003,11 @@ function crossTargets(){
     let why='';
     if(k==='幽墟'){
       if(here!=='轮枢') why='幽墟的门在轮枢，得先到轮枢';
-      else if(!S.gateOpen&&!S.abyssSafe) why=`门${gateMonthName()}才开，还有 ${gateLeft()} 个月`;
+      else if(!S.gateOpen&&!S.abyssSafe&&!hasT('xuxinyan')) why=`门${gateMonthName()}才开，还有 ${gateLeft()} 个月`;
     }
     else if(here==='幽墟'){
       if(layerOf().n>1) why='门在外环，得先回到第一层';
-      else if(!S.gateOpen&&!S.abyssSafe) why=`门${gateMonthName()}才开，还有 ${gateLeft()} 个月`;
+      else if(!S.gateOpen&&!S.abyssSafe&&!hasT('xuxinyan')) why=`门${gateMonthName()}才开，还有 ${gateLeft()} 个月`;
     }
     else if(k!=='轮枢' && here!=='轮枢') why='不直达，先去轮枢';
     out.push({key:k, name:j.name, sigil:j.sigil, one:j.one, ok:!why, why, cost:crossCost(k)});
@@ -2009,6 +2024,7 @@ function crossQuote(k){
   const pass=leaveAbyss?null:(isAbyss?abyssPass():passItem());
   let cost=t.cost, how='';
   if(free){ how='随心所欲：一路畅通，没人拦你'; }
+  else if(hasT('tongxingling')&&!leaveAbyss){ cost=0; how='亮出万界通行令，一路放行'; }
   else if(leaveAbyss){ how='趁门开着，顺原路上去'; }
   else if(pass){ how=`凭《${pass.it.name}》过界`; }
   else if(isAbyss){ cost=Math.round(cost*2); how='没有神殿的引荐，只能出双倍的价钱雇走私客下去'; }
@@ -2234,7 +2250,7 @@ function inAbyss(){ try{ return !!(S&&S.realm==='幽墟'); }catch(_){ return fal
 function abyssDC(){ if(!inAbyss()) return 0; const L=layerOf(); return L.dc+(lordAtkHere()?-10:0); }
 // 界主这个月定了「攻」，人又在幽墟里
 function lordAtkHere(){ return !!(S&&S.gateOpen&&myLordRealm()&&S.lordPolicy==='攻'&&inAbyss()); }
-function fateRoll(){ const v=d20(); return inAbyss()?Math.max(1,v-3):v; }
+function fateRoll(){ const v=treasureFate(d20()); return inAbyss()?Math.max(1,v-3):v; }
 const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
 const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
 function fateInfo(r){
@@ -2330,14 +2346,14 @@ function autoBonus(it){
 function fixBonus(it){ if(it&&!(num(it.bonus)>0)) it.bonus=autoBonus(it); return it; }
 function weaponBonus(p){
   let b=0;
-  for(const w of (p.items&&p.items['法宝']||[])) b=Math.max(b, Math.min(num(w.bonus), w&&w.cursed?30:20));  // 幽墟来的器物高一档
+  for(const w of (p.items&&p.items['法宝']||[])) b=Math.max(b, Math.min(num(w.bonus), w&&w.treasure?35:(w&&w.cursed?30:20)));  // 幽墟来的器物高一档
   return b;
 }
 // 幽墟来的东西每月要账：不是耗气血，就是把人往恶里推。丢了就停，别做成陷阱，做成账
 function cursedTick(months){
   const p=S&&S.player; if(!p||!p.items) return;
   let hp=0, evil=0;
-  for(const cat in p.items) for(const it of (p.items[cat]||[])) if(it&&it.cursed){
+  for(const cat in p.items) for(const it of (p.items[cat]||[])) if(it&&it.cursed&&!it.treasure){
     if(it.curse==='evil') evil+=2*num(months); else hp+=3*num(months);
   }
   if(hp) p.hp=clamp(p.hp-hp,0,100);
@@ -2350,6 +2366,8 @@ function attrVal(p,attr){
     v+=weaponBonus(p);
     if(p.hp<30) v-=15;
     if((p.status||[]).includes('走火入魔')) v-=10;
+  }else if(S&&S.player===p){
+    v+=tSum(t=>t.attr&&t.attr[attr]);             // 珍宝的常驻加成
   }
   return v;
 }
@@ -2499,7 +2517,7 @@ function buyWard(){
   renderPanel(); renderWorld(); saveGame();
 }
 // 外环黑市淘一件幽墟器物：好用，要账
-const RELIC_NAMES=['噬影骨刃','无光海的沉铁','堕日残钟','拾骨人的秤','吞灯','织命者的线','怨街的纸灯','蚀骨匕首'];
+const RELIC_NAMES=['噬影骨刃','无光海的沉铁','堕日残钟','拾骨人的秤','怨街的纸灯','蚀骨匕首','断喙骨哨','暗红铁环'];
 function relicCost(){ return Math.round(600*(S.difficulty==='hard'?1.4:(S.difficulty==='easy'?0.7:1))); }
 function buyRelic(){
   if(!S||S.over||busy||!inAbyss()||layerOf().n!==1) return;
@@ -3602,6 +3620,181 @@ function tiesBlock(){
   const body=same.concat(lines.slice(0,36).map(x=>x.t));
   return body.length?`\n【名人旧交（这些人本来就认得，写到其中一个时，另一个不是陌生人；「甲—乙：……」说的是甲对乙；称呼、态度、恩怨都要对得上）】\n${body.join('\n')}`:'';
 }
+/* ================= 隐藏宝物（规范 v3.2）=================
+   每界藏着几件有名有姓的宝物，功效写死。不管怎么到手，名字对上了就按这里算，模型写的数不算。
+   天下各只一件：在主角手里的不会再给；丢了的回到世上，还能再找回来。 */
+const TREASURES=[
+ // 东荒
+ {key:'jingubang',name:'如意金箍棒',alias:['金箍棒','定海神针'],realm:'东荒',cat:'法宝',bonus:28,grudge:'敖广',
+  where:'东海龙宫镇海之物；孙悟空拿走过，得从他或龙宫手里得',say:'修为 +28'},
+ {key:'bajiaoshan',name:'芭蕉扇',alias:['芭蕉宝扇'],realm:'东荒',cat:'法宝',bonus:12,duel:1,grudge:'牛魔王',
+  where:'翠云山芭蕉洞，铁扇公主手里',say:'修为 +12；比武多一档'},
+ {key:'zijinhulu',name:'紫金葫芦',alias:[],realm:'东荒',cat:'法宝',bonus:10,duel:2,grudge:'太上老君',
+  where:'太上老君兜率宫的宝贝，金角银角偷下过界',say:'修为 +10；比武多两档，胜了可以把对手收进葫芦（废其修为）'},
+ {key:'jiuzhuan',name:'九转金丹',alias:['太上老君仙丹','老君仙丹'],realm:'东荒',cat:'医药',use:{heal:true,life:40},
+  where:'兜率宫的八卦炉',say:'到手即服：伤病与旧伤尽愈，寿元 +40'},
+ {key:'zhaoyao',name:'照妖镜',alias:[],realm:'东荒',cat:'法宝',bonus:6,attr:{'悟性':15},
+  where:'天庭，托塔李天王那里',say:'修为 +6；识破、参悟类（悟性）判定 +15；妖物、幻面族的伪装一照就现',prompt:'主角带着照妖镜：妖物、化形者、幻面族的伪装在他面前藏不住'},
+ {key:'renshenguo',name:'人参果',alias:['草还丹'],realm:'东荒',cat:'医药',use:{life:60},grudge:'镇元子',
+  where:'万寿山五庄观，镇元子的果树',say:'到手即服：寿元 +60'},
+ // 西陆
+ {key:'shizhongjian',name:'石中剑',alias:['王者之剑','誓约胜利之剑'],realm:'西陆',cat:'法宝',bonus:25,use:{fame:10},
+  where:'湖中仙女或亚瑟王手里',say:'修为 +25；到手时声望 +10',prompt:'主角持有石中剑：骑士们认得这把剑，会来验他配不配'},
+ {key:'shengbei',name:'圣杯',alias:['圣杯宝器'],realm:'西陆',cat:'其他',heal:true,
+  where:'下落不明，加拉哈德寻到过',say:'每月气血回满，伤病好得快一倍',prompt:'主角持有圣杯：教廷一直在找它'},
+ {key:'xianzhe',name:'贤者之石',alias:[],realm:'西陆',cat:'其他',use:{life:50},income:80,
+  where:'炼金术师尼古拉·弗拉梅尔',say:'到手时寿元 +50；此后每月进账 +80 两',prompt:'主角持有贤者之石：魔法塔盯上了他'},
+ {key:'gelamu',name:'格拉姆',alias:['屠龙剑','格拉姆剑'],realm:'西陆',cat:'法宝',bonus:20,duelVs:[/龙/,1],
+  where:'龙族宝藏深处',say:'修为 +20；对龙族比武多一档',prompt:'主角持有屠龙剑格拉姆：龙族闻得到它的味道'},
+ {key:'jinglingzhiguang',name:'精灵之光',alias:['加拉德瑞尔的水晶瓶','水晶瓶'],realm:'西陆',cat:'其他',charms:1,ward:true,
+  where:'精灵女王加拉德瑞尔',say:'保命一次；下幽墟不受侵蚀'},
+ {key:'yinshen',name:'隐身斗篷',alias:[],realm:'西陆',cat:'其他',
+  where:'矮人工匠的秘藏',say:'潜行、逃跑、偷盗类判定 +15',prompt:'主角有隐身斗篷：潜行、逃跑、偷盗这类判定，总值再加 15'},
+ // 樱洲
+ {key:'caozhijian',name:'草薙剑',alias:['天丛云剑','天丛云'],realm:'樱洲',cat:'法宝',bonus:28,grudge:'德川家康',
+  where:'幕府秘藏的神器',say:'修为 +28'},
+ {key:'bazhijing',name:'八咫镜',alias:[],realm:'樱洲',cat:'其他',attr:{'悟性':15},ward:true,
+  where:'神社供奉',say:'识破、参悟类（悟性）判定 +15；下幽墟不受侵蚀'},
+ {key:'gouyu',name:'八尺琼勾玉',alias:['八坂琼曲玉','勾玉'],realm:'樱洲',cat:'其他',attr:{'谈吐':10},fateFloor:3,
+  where:'神社供奉',say:'谈吐 +10；天命骰不会低于 3'},
+ {key:'tongziqie',name:'童子切安纲',alias:['童子切'],realm:'樱洲',cat:'法宝',bonus:18,duelVs:[/妖|鬼|怪|天狗|狐/,1],grudge:'酒吞童子',
+  where:'源赖光的佩刀',say:'修为 +18；对妖怪、鬼比武多一档'},
+ {key:'cunzheng',name:'村正',alias:['妖刀村正'],realm:'樱洲',cat:'法宝',bonus:24,cost:{evil:2},
+  where:'刀匠后人或黑市',say:'修为 +24；每月恶名 +2',prompt:'主角佩着妖刀村正：德川家视之为不祥'},
+ {key:'shiertianjiang',name:'十二天将符',alias:['十二天将','安倍晴明的式神符'],realm:'樱洲',cat:'其他',duel:2,
+  where:'阴阳寮，安倍晴明手里',say:'比武多两档（式神助阵）'},
+ // 轮枢
+ {key:'tongxingling',name:'万界通行令',alias:['通行令'],realm:'轮枢',cat:'其他',cross:true,
+  where:'冒险者公会，S 级委托的赏',say:'过界不花钱、不查门路'},
+ {key:'lunqian',name:'命运轮签',alias:['轮签'],realm:'轮枢',cat:'其他',fateTwice:12,
+  where:'命运神殿的祭司',say:'天命骰掷两次取高，用满 12 次就碎'},
+ {key:'jinqi',name:'商盟金契',alias:['金契'],realm:'轮枢',cat:'其他',income:120,
+  where:'万界商盟的会长',say:'每月进账 +120 两',prompt:'主角持有商盟金契：商盟的事会找上他'},
+ // 幽墟
+ {key:'xuxinyan',name:'墟心之眼',alias:[],realm:'幽墟',cat:'其他',abyssGate:true,ward:true,cost:{hp:4},
+  where:'墟心',say:'幽墟的门没开也能进出；不受侵蚀；每月气血 -4'},
+ {key:'tundeng',name:'吞灯',alias:[],realm:'幽墟',cat:'法宝',bonus:35,cost:{evil:3},cursed:true,
+  where:'无光海底',say:'修为 +35；每月恶名 +3'},
+ {key:'zhimingxian',name:'织命者之线',alias:['织命者的线'],realm:'幽墟',cat:'其他',charms:2,charmCost:2,
+  where:'百鬼夜行街',say:'保命两次；每用一次侵蚀度 +2'},
+ {key:'dinghaizhu',name:'定海珠残片',alias:['定海珠'],realm:'幽墟',cat:'法宝',bonus:10,duelVs:[/赵公明残念/,2],
+  where:'赵公明残念身上',say:'修为 +10；与赵公明残念比武多两档'}
+];
+function treasureByKey(k){ return TREASURES.find(t=>t.key===k)||null; }
+function treasureOf(name){
+  name=String(name||'').replace(/[《》「」【】\s]/g,''); if(!name) return null;
+  return TREASURES.find(t=>t.name===name||t.alias.indexOf(name)>=0)
+      || TREASURES.find(t=>name.indexOf(t.name)>=0||t.alias.some(a=>a.length>=3&&name.indexOf(a)>=0))
+      || null;
+}
+function tState(){ if(!S.treasures||typeof S.treasures!=='object') S.treasures={}; return S.treasures; }
+function heldTreasures(){
+  const out=[]; const p=S&&S.player; if(!p||!p.items) return out;
+  for(const cat in p.items) for(const it of (p.items[cat]||[])) if(it&&it.treasure&&treasureByKey(it.treasure)) out.push({it,t:treasureByKey(it.treasure)});
+  return out;
+}
+function hasT(key){ return heldTreasures().some(x=>x.t.key===key); }
+function tSum(f){ let v=0; for(const {t} of heldTreasures()) v+=num(f(t)); return v; }
+// 到手：换成表里那一件；已在手里的不收，吃的当场吃掉
+function claimTreasure(item, t){
+  const st=tState();
+  if(hasT(t.key)){ news(`${t.name}已经在主角手里了，天下只此一件`); return null; }
+  st[t.key]={state:'held', seen:true, at:num(S.months)};
+  const it={name:t.name, desc:`珍宝·${t.realm}：${t.say}`, from:t.realm, treasure:t.key};
+  if(t.cat==='法宝') it.bonus=t.bonus||0;
+  if(t.ward) it.ward=true;
+  if(t.cursed){ it.cursed=true; it.curse='none'; }
+  if(t.charms) it.charms=t.charms;
+  if(t.fateTwice) it.uses=t.fateTwice;
+  ledger(`得到珍宝【${t.name}】`);
+  const u=t.use||{};
+  if(u.heal){ S.player.hp=100; S.ailments=[]; S.scars=[]; rebuildStatus(); logGot(`服下【${t.name}】，伤病与旧伤尽愈`); }
+  if(u.life){ const g=grantLifespan(u.life,`服下${t.name}`); if(g) lastDeltas['寿元']=num(lastDeltas['寿元'])+g; }
+  if(u.fame){ S.player['声望']=clamp(num(S.player['声望'])+u.fame); lastDeltas['声望']=num(lastDeltas['声望'])+u.fame; }
+  if(t.grudge){
+    const g=findNpc(t.grudge);
+    if(g&&g.alive) addVendetta(g.name,`你拿走了${t.name}`,false,40);
+    else news(`${t.grudge}那边记下了${t.name}落到主角手里这件事`);
+  }
+  if(t.cat==='医药'&&(u.heal||u.life)){ st[t.key].state='used'; logGot(`得到【${t.name}】（珍宝，当场服下）`); return null; }
+  logGot(`得到【${t.name}】（珍宝·${t.say}）`);
+  return it;
+}
+// 丢了的回到世上
+function treasureSync(){
+  const st=tState();
+  for(const k in st) if(st[k].state==='held'&&!hasT(k)){ st[k].state='lost'; ledger(`珍宝【${treasureByKey(k).name}】离了身`); }
+}
+// 保命：本该死的时候挡一下
+function saveLife(cause){
+  for(const {it,t} of heldTreasures()){
+    if(!(num(it.charms)>0)) continue;
+    it.charms=num(it.charms)-1;
+    if(t.charmCost) erosionAdd(t.charmCost);
+    S.player.hp=Math.max(num(S.player.hp),25);
+    ledger(`【${t.name}】替主角挡下一劫（${cause||'险些丧命'}）`);
+    news(`主角本该丧命，${t.name}替他挡了下来${it.charms>0?'':'，宝物也就此碎了'}`);
+    if(it.charms<=0){ for(const c in S.player.items) S.player.items[c]=S.player.items[c].filter(x=>x!==it); tState()[t.key]={state:'used',seen:true}; }
+    rebuildStatus();
+    return true;
+  }
+  return false;
+}
+function treasureDuel(opp){
+  let n=0;
+  for(const {t} of heldTreasures()){
+    n+=num(t.duel);
+    if(t.duelVs&&opp&&t.duelVs[0].test(`${opp.name||''} ${opp.identity||''} ${opp.faction||''}`)) n+=t.duelVs[1];
+  }
+  return n;
+}
+// 每月结一次：进账、代价、圣杯回血
+function treasureMonth(){
+  const p=S.player; if(!p) return;
+  const inc=tSum(t=>t.income); if(inc){ p.money=num(p.money)+inc; }
+  const hp=tSum(t=>t.cost&&t.cost.hp), evil=tSum(t=>t.cost&&t.cost.evil);
+  if(hp) p.hp=Math.max(1,num(p.hp)-hp);
+  if(evil) p['恶名']=clamp(num(p['恶名'])+evil);
+  if(hasT('shengbei')) p.hp=100;
+}
+function treasureFate(v){
+  const floor=Math.max(0,...heldTreasures().map(x=>num(x.t.fateFloor)));
+  for(const {it,t} of heldTreasures()){
+    if(!t.fateTwice||!(num(it.uses)>0)) continue;
+    v=Math.max(v,d20()); it.uses=num(it.uses)-1;
+    if(it.uses<=0){ for(const c in S.player.items) S.player.items[c]=S.player.items[c].filter(x=>x!==it); tState()[t.key]={state:'used',seen:true}; ledger(`【${t.name}】用满了，碎了`); }
+    break;
+  }
+  return Math.max(v,floor);
+}
+// 进提示词：当界藏着什么（固定，进缓存）
+function treasureLore(realm){
+  const l=TREASURES.filter(t=>t.realm===realm);
+  if(!l.length) return '';
+  return `\n- 本界藏着的珍宝（天下各只一件，功效由引擎定；只有剧情真走到那一步——打赢持有者、办成委托、买下、受赠、寻到——才能写进 itemsAdd，名字照抄，不要自己编功效，也不要随手白送）：${l.map(t=>`${t.name}（${t.where}）`).join('；')}`;
+}
+// 进提示词：主角手里有哪些（会变，放后半截）
+function treasureHeldLine(){
+  const h=heldTreasures(); if(!h.length) return '';
+  return `\n【主角随身的珍宝（天下各只一件，不要再给第二件）】${h.map(({it,t})=>`${t.name}：${t.say}${t.prompt?'；'+t.prompt:''}${it.charms!=null?`（还剩${it.charms}次）`:''}${it.uses!=null?`（还能用${it.uses}次）`:''}`).join('；')}`;
+}
+function renderTreasures(){
+  const box=$('treasureList'); if(!box||!S) return;
+  const st=tState();
+  const rows=REALM_KEYS.map(R=>{
+    const l=TREASURES.filter(t=>t.realm===R);
+    const known=l.filter(t=>st[t.key]&&st[t.key].seen), unk=l.length-known.length;
+    return `<div class="trrealm">${JIE[R].sigil} ${R}</div>`+known.map(t=>{
+      const s=st[t.key];
+      const tag=hasT(t.key)?'在身边':(s.state==='used'?'已用去':'已离身');
+      return `<div class="tritem"><b>${esc(t.name)}</b><small>${tag}</small><div class="idesc">${esc(t.say)}</div></div>`;
+    }).join('')+(unk?`<div class="tritem unk">？？？ 还有 ${unk} 件没见过</div>`:'');
+  }).join('');
+  const got=TREASURES.filter(t=>st[t.key]&&st[t.key].seen).length;
+  $('treasureSub').textContent=`${got} / ${TREASURES.length}`;
+  box.innerHTML=rows;
+}
+
 function poolNames(realm){ return (NPC_POOL[realm]||[]).flatMap(g=>g[1].split('、')); }
 function poolBlock(realm){
   const g=NPC_POOL[realm]; if(!g) return '';
@@ -3803,7 +3996,7 @@ function jieBlock(){
 - 本界之禁：${j.ban}
 - 人物起名：${nameOf(jieName()).how}。例如：${nameSamples(jieName(),3).join('、')}
 - 本界常见的去处（写 scene.location 时优先用这些，别自己另造）：${placeList(jieName()).join('、')}
-- 本界的味道：${j.flavor}${j.foreignView?`
+- 本界的味道：${j.flavor}${treasureLore(j.name)}${j.foreignView?`
 - 别界怎么看：${j.foreignView}`:''}${poolBlock(j.name)}${j.extraRelation?`
 - 本界独有的关系：${j.extraRelation}`:''}${j.extraNote?`
 - ${j.extraNote}`:''}${(S&&S.homeRealm&&S.realm&&S.realm!==S.homeRealm)?`
@@ -4046,7 +4239,7 @@ ${situBlock()}
 【宿命】
 ${quests}
 【随行的人（跟着主角走，主角在哪他们就在哪）】${followers().map(n=>n.name).join('、')||'（无）'}
-【眼下要紧的人】${JSON.stringify(npcBrief)}${tiesBlock()}
+【眼下要紧的人】${JSON.stringify(npcBrief)}${tiesBlock()}${treasureHeldLine()}
 【别处的旧识（不在主角眼前：远在别界的人本回合不会露面、不说话、不出现在 npcEvents 里，至多以别界传来的风闻提一句）】${farText}
 【已亡故】${goneText}
 【当世格局】${world}
@@ -4865,6 +5058,8 @@ function applyTurn(d, action, judge){
       const item=(typeof item0==='string')?{name:item0}:item0;
       if(!item||!item.name) continue;
       item.name=plain(item.name);
+      const tr=treasureOf(item.name);
+      if(tr){ const ti=claimTreasure(item,tr); if(ti){ p.items[tr.cat]=p.items[tr.cat]||[]; p.items[tr.cat].push(ti); } continue; }
       const cat=itemCat(cat0,item.name);
       if(!p.items[cat]) p.items[cat]=[];
       if(!item.from) item.from=jieName();                       // 物件记来路（规范 v1.1 第 4.2 条）
@@ -5008,7 +5203,8 @@ function applyTurn(d, action, judge){
     const asked=/收尾|收官|结束这一?局|终局|完结|立传|了此残生|自尽|自刎|了结此生/.test(String(action||''));
     const sd=fdm().storyDeath;
     const allow = asked || sd>=1 || (sd>0 && p.hp<30);
-    if(allow){ S.over=true; S.ending=d.ending||''; }
+    if(allow&&!asked&&saveLife('剧情里险些丧命')){ d.gameOver=false; d.ending=null; lastDeathSaved='主角本该丧命，身上的珍宝替他挡了下来，他活了，但宝物的保命之力少了一次。此事记在账上，下回合须照此续写。'; }
+    else if(allow){ S.over=true; S.ending=d.ending||''; }
     else{
       d.gameOver=false; d.ending=null;
       p.hp=Math.max(1,Math.min(p.hp,22));
@@ -5155,7 +5351,7 @@ function startDuel(opp, o){
   duel={
     opp, lethal:!!o.lethal, reason:o.reason||'', action:o.action||`与${opp.name}比武`, judge:o.judge||null, vendetta:o.vendetta||null,
     pHp:p.hp, oHp:o.oppHp||100, pQi:clamp(50+wuNorm(p.attributes['修为'])/2), oQi:clamp(50+wuNorm(oppW)/2),
-    oppW, pW:attrVal(p,'修为'), round:0, log:[], over:false, result:null, resultText:'', profile:oppProfile(opp), friendly:!!o.friendly
+    oppW, pW:attrVal(p,'修为')+8*treasureDuel(opp), round:0, log:[], over:false, result:null, resultText:'', profile:oppProfile(opp), friendly:!!o.friendly
   };
   $('duelTitle').textContent=(duel.friendly?'切磋':'比武')+' · '+opp.name;
   $('duelSub').textContent=(duel.reason||'')+(duel.lethal?'　⚠ 对方不会留手，此战可能致命':'　点到为止');
@@ -5488,7 +5684,10 @@ function endDuel(kind){
     if(duel.profile.agg) kill+=0.1;
     if(S.difficulty==='easy') kill*=0.5; if(S.difficulty==='hard') kill+=0.1;
     kill*=fdm().kill;
-    if(Math.random()<kill) return duelDeath(`主角败于${him}之手，${him}没有留手，一招毙命。`);
+    if(Math.random()<kill){
+      if(saveLife(`败于${him}之手`)){ duelSys('✦ 致命一击落下的那一刻，身上的宝物替你挡了下来。'); }
+      else return duelDeath(`主角败于${him}之手，${him}没有留手，一招毙命。`);
+    }
     const rob=!duel.friendly&&duel.opp.alignment!=='正派'&&Math.random()<0.5&&S.player.money>0;
     let txt=`主角落败重伤，${him}${duel.friendly?'收招不再追击':'手下留情没有杀他'}`;
     if(rob){ const m=Math.round(S.player.money*rnd(3,7)/10); S.player.money-=m; txt+=`，但搜走了主角${m}两银子`; }
@@ -5574,6 +5773,8 @@ function applyConvoEffects(n, eff, attemptOk){
       const know=artKnown(gn); if(know){ out.push(`【${know.name}】你早已练成，这本册子于你没用`); continue; }
     }
     if(!risky||!c.canItem){ out.push(`${n.name}到底没舍得把【${it.name}】给你`); continue; }
+    const tr=treasureOf(it.name);
+    if(tr){ const ti=claimTreasure({name:it.name},tr); if(ti){ p.items[tr.cat]=p.items[tr.cat]||[]; p.items[tr.cat].push(ti); gain(out,`${n.name}给了你珍宝【${tr.name}】`); } else out.push(`【${tr.name}】你已经有了`); continue; }
     const cat=itemCat(it.cat,it.name);
     p.items[cat]=p.items[cat]||[];
     p.items[cat].push(cat==='法宝'?fixBonus({name:it.name, desc:it.desc||'', bonus:clamp(num(it.bonus),0,20)}):{name:it.name, desc:it.desc||''});
@@ -6310,6 +6511,8 @@ async function fightOuter(){
 }
 function renderWorld(){
   renderLore();
+  treasureSync();
+  renderTreasures();
   renderGate();
   const oq=(S.quests||[]).find(x=>x.kind==='outer');
   if(oq&&oq.status==='进行中') oq.progress=outerProgress();
