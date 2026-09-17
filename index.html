@@ -833,7 +833,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=19;
+const SAVE_VERSION=20;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -1028,6 +1028,11 @@ function migrate(s){
     if(s.day==null) s.day=0;
     for(const o of (s.lastOptions||[])) if(o&&o.days==null&&o.months!=null) o.days=Math.round(num(o.months)*30);
     s.v=19;
+  }
+  if(s.v<20){
+    // 没写加成的法宝补一个
+    for(const it of ((s.player&&s.player.items&&s.player.items['法宝'])||[])) fixBonus(it);
+    s.v=20;
   }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
@@ -1785,7 +1790,7 @@ function lordMonthly(){
   if(S.lordMonths%6===0){
     const nm=pick(LORD_GIFTS[R]);
     S.player.items['法宝']=S.player.items['法宝']||[];
-    S.player.items['法宝'].push({name:nm, desc:`${R}各方献给界主的东西`, from:R});
+    S.player.items['法宝'].push({name:nm, desc:`${R}各方献给界主的东西`, from:R, bonus:14+avHash(nm)%5});
     ledger(`${R}各方献上${nm}`); news(`${R}那边又送了件东西来：${nm}`);
   }
 }
@@ -2311,6 +2316,18 @@ function artBonus(stance){
 }
 
 
+/* 法宝要加修为。模型给物件时常常不写 bonus，以前这种法宝就是个摆设。
+   没写的按名字和说明估一个：先天、神器一档，寻常兵刃一档；幽墟来的高一档。 */
+function autoBonus(it){
+  if(!it) return 0;
+  const t=`${it.name||''} ${it.desc||''}`;
+  const h=avHash(it.name||'');
+  if(it.cursed) return 20+h%9;
+  if(/先天|神器|灵宝|圣物|圣剑|神兵|至宝|镇派|传世|草薙|村正|童子切|三日月|九龙|混元|乾坤|定海|龙息|贤者/.test(t)) return 14+h%5;
+  if(/残|锈|破|钝|木|竹|练习|粗制|凡铁|寻常/.test(t)) return 2+h%3;
+  return 6+h%6;
+}
+function fixBonus(it){ if(it&&!(num(it.bonus)>0)) it.bonus=autoBonus(it); return it; }
 function weaponBonus(p){
   let b=0;
   for(const w of (p.items&&p.items['法宝']||[])) b=Math.max(b, Math.min(num(w.bonus), w&&w.cursed?30:20));  // 幽墟来的器物高一档
@@ -4580,7 +4597,7 @@ function applyTurn(d, action, judge){
         item.cursed=true;
         if(item.curse!=='hp'&&item.curse!=='evil') item.curse=Math.random()<0.5?'hp':'evil';
       }
-      if(cat==='法宝'&&item.bonus!=null) item.bonus=clamp(num(item.bonus),0,item.cursed?30:20);
+      if(cat==='法宝'){ fixBonus(item); item.bonus=clamp(num(item.bonus),0,item.cursed?30:20); }
       p.items[cat].push(item);
       logGot(`得到【${item.name}】（行囊·${cat}）`);
     }
@@ -4600,9 +4617,24 @@ function applyTurn(d, action, judge){
   // 状态一律由引擎重算：引擎态 + 终身旧伤 + 还没好的伤病
   if(S.healedLast&&S.healedLast.length){ lastDeltas['伤愈']=S.healedLast.slice(); S.healedLast=[]; }
   rebuildStatus();
-  // NPC
+  // NPC：先收新认识的人，再记变化——模型常在同一回合里既把人写进 newNpcs、又在 npcUpdates 里给他加好感，
+  // 以前先处理 npcUpdates，那时人还没入册，这笔好感就丢了
+  for(const nn of (d.newNpcs||[])){ if(nn&&nn.name&&(nn.name=plain(nn.name))&&!S.npcs.find(x=>x.name===nn.name)){
+    const o=normNpc(nn); o.lastSeen=S.turn;
+    const b=bossOf(o.name);
+    if(b){ o['修为']=b.wu; o.faction='幽墟头目'; o.realm='幽墟'; o.identity=`幽墟头目·${b.title}`; o.alignment=o.alignment||'邪道'; if(bossDead(b)) continue; }
+    if(erosionStage()>=3&&TIE_REALMS.indexOf(jieName())>=0) o['好感度']=clamp(num(o['好感度'])-10);   // 被幽墟标记过的人，三界的人见了不自在
+    S.npcs.push(o); autoFollow(o); logGot(`结识新人物【${o.name}】（${o.relation||''}）${o.follow?'，跟在你身边':''}`);
+  } }
   for(const u of (d.npcUpdates||[])){
-    const n=findNpc(u.name);
+    if(!u||!u.name) continue;
+    let n=findNpc(u.name);
+    // 模型没把人写进 newNpcs、只在 npcUpdates 里提了一笔：有名有姓有来头的，也收进名录，别让剧情里的人在面板上找不着
+    if(!n&&(u.relation||u.identity)&&!/^(众人|路人|一众|大家|某人|无名)/.test(String(u.name))){
+      n=normNpc({name:plain(u.name), gender:u.gender||'', age:num(u.age)||30, identity:u.identity||'', relation:u.relation||'萍水相逢',
+        faction:u.faction||'', alignment:u.alignment||'中立', '好感度':30, mood:u.mood||'平静', alive:u.alive!==false});
+      S.npcs.push(n); autoFollow(n); logGot(`结识新人物【${n.name}】（${n.relation||''}）`);
+    }
     if(!n) continue;
     if(num(u['好感度'])){ const b=num(n['好感度']); n['好感度']=clamp(b+num(u['好感度'])); if(n['好感度']!==b) logGot(`${n.name} 好感 ${n['好感度']>b?'+':''}${n['好感度']-b}（今 ${n['好感度']}）`); }
     if(u['爱恋值']!=null&&(num(u['爱恋值'])||n['爱恋值']==null)){
@@ -4622,13 +4654,6 @@ function applyTurn(d, action, judge){
     if(u.secretRevealed&&!n.secretKnown){ n.secretKnown=true; S.stats.secrets++; ledger(`探知${n.name}的秘密：${n.secret||'一桩隐情'}`); logGot(`✦ 揭开了 ${n.name} 的秘密`); }
     n.lastSeen=S.turn;
   }
-  for(const nn of (d.newNpcs||[])){ if(nn&&nn.name&&!S.npcs.find(x=>x.name===nn.name)){
-    const o=normNpc(nn); o.lastSeen=S.turn;
-    const b=bossOf(o.name);
-    if(b){ o['修为']=b.wu; o.faction='幽墟头目'; o.realm='幽墟'; o.identity=`幽墟头目·${b.title}`; o.alignment=o.alignment||'邪道'; if(bossDead(b)) continue; }
-    if(erosionStage()>=3&&TIE_REALMS.indexOf(jieName())>=0) o['好感度']=clamp(num(o['好感度'])-10);   // 被幽墟标记过的人，三界的人见了不自在
-    S.npcs.push(o); autoFollow(o); logGot(`结识新人物【${o.name}】（${o.relation||''}）${o.follow?'，跟在你身边':''}`);
-  } }
   // 宿命
   for(const q of (d.questUpdates||[])){
     const t=S.quests.find(x=>x.title===q.title)||S.quests.find(x=>q.title&&(x.title.includes(q.title)||q.title.includes(x.title)));
@@ -5276,7 +5301,7 @@ function applyConvoEffects(n, eff, attemptOk){
     if(!risky||!c.canItem){ out.push(`${n.name}到底没舍得把【${it.name}】给你`); continue; }
     const cat=itemCat(it.cat,it.name);
     p.items[cat]=p.items[cat]||[];
-    p.items[cat].push({name:it.name, desc:it.desc||'', bonus:cat==='法宝'?clamp(num(it.bonus),0,20):undefined});
+    p.items[cat].push(cat==='法宝'?fixBonus({name:it.name, desc:it.desc||'', bonus:clamp(num(it.bonus),0,20)}):{name:it.name, desc:it.desc||''});
     gain(out,`${n.name}给了你【${it.name}】`);
   }
   for(const nm of (eff.take||[]).slice(0,2)){
@@ -5554,11 +5579,12 @@ function renderPanel(){
   const _pt=$('pPath'); if(_pt){ const _p=pathOf(); _pt.textContent=_p?('主修 '+_p):''; }
   for(const k of ['谈吐','学识','悟性','修为']){
     const v=p.attributes[k];
-    const extra=k==='修为'&&weaponBonus(p)?`<small style="color:var(--ink-faint);font-weight:400">（+${weaponBonus(p)}法宝）</small>`:'';
+    const wb=k==='修为'?weaponBonus(p):0;
+    const extra=wb?`<small style="color:var(--ink-faint);font-weight:400">（本身${v}＋法宝${wb}）</small>`:'';
     // 修为可能远超 100，条子按「当世第一」作分母，旁边挂境界
     const fill=k==='修为'?pw(num(v)/Math.max(100,lvNow)*100):pw(v);
     const realm=k==='修为'?`<small style="color:var(--ink-faint);font-weight:400">　${tierOf(attrVal(p,'修为'))}</small>`:'';
-    ah+=`<div class="attr"><div class="lab"><b>${k}${k==='悟性'?`<small style="color:var(--ink-faint);font-weight:400">（先天${homeJie().witName&&homeJie().witName!=='悟性'?'·'+homeJie().witName:''}）</small>`:''}${extra}${realm}</b><span>${v}${deltaTag(lastDeltas[k])}</span></div><div class="bar"><i style="width:${fill}%;background:${barColor(k)}"></i></div></div>`;
+    ah+=`<div class="attr"><div class="lab"><b>${k}${k==='悟性'?`<small style="color:var(--ink-faint);font-weight:400">（先天${homeJie().witName&&homeJie().witName!=='悟性'?'·'+homeJie().witName:''}）</small>`:''}${extra}${realm}</b><span>${wb?num(v)+wb:v}${deltaTag(lastDeltas[k])}</span></div><div class="bar"><i style="width:${fill}%;background:${barColor(k)}"></i></div></div>`;
   }
   if(WCAP()>100) ah+=`<div style="font-size:12px;color:var(--ink-soft);margin-top:2px">当世水位 ${lvNow}（修为条以此为满格）　上限 ${WCAP()}</div>`;
   $('pAttrs').innerHTML=ah;
