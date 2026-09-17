@@ -114,7 +114,12 @@ ok('v3.0 批 A 十二张都到了，不再借图', await page.evaluate(()=>Objec
 ok('八张新机制横幅都接上了', await page.evaluate(()=>
   ['sc_d_tide','sc_w_tide','sc_s_tide','sc_war','sc_court','sc_h_oracle','sc_a_bone','sc_a_forest']
     .every(k=>SCENE_IMG[k])));
-ok('十九张立绘都在', await page.evaluate(()=>Object.keys(POR_IMG).length===19&&!!POR_IMG['x_fallen_angel']));
+ok('二十二张立绘都在', await page.evaluate(()=>Object.keys(POR_IMG).length===22));
+// 头目立绘出一张接一张，这里只钉「已出的必须在」，缺的那几个走退回小头像
+ok('已出的四张头目立绘都在', await page.evaluate(()=>
+  ['x_fallen_angel','x_vampire','x_oni','x_devourer'].every(k=>POR_IMG[k])));
+ok('还没出的头目立绘确实没混进来', await page.evaluate(()=>
+  ['x_boss_east','x_fox','x_witch','x_onryo'].every(k=>!POR_IMG[k])));
 ok('十七种特型各有一张立绘', await page.evaluate(()=>
   AV_SLOTS.filter(x=>x.charAt(0)==='x'&&!Object.values(BOSS_AV).includes(x)).every(k=>k==='x_child'||POR_IMG[k])));
 ok('头目认脸：路西法用堕天使那张，没立绘的头目退回小头像', await page.evaluate(()=>avSlotOf({name:'路西法',avatar:'x_abyss'})==='x_fallen_angel'&&!!porOf({name:'路西法'})&&!porOf({name:'妲己'})&&avSlotOf({name:'妲己'})==='x_fox'));
