@@ -5,6 +5,7 @@ art/*
 !art/万界/
 art/万界/*
 !art/万界/build.py
+!art/万界/build_v34.py
 !art/万界/desc.txt
 !art/万界/cover.png
 

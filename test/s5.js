@@ -1,9 +1,9 @@
 // S5 幽墟专测：进出的路、境内的险、侵蚀、幽墟器物、名录半套、跨界宿命、v10 迁移
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 const fails=[],oks=[];
 const ok=(n,c)=>{ (c?oks:fails).push(n); console.log((c?'  ✓ ':'  ✗ ')+n); };
 let page;

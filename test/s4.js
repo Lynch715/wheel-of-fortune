@@ -1,9 +1,9 @@
 // S4 美术接入自测：图集落桶、特型命中、界徽、场景匹配、转轮出图、封面与图标
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 const fails=[],oks=[];
 const ok=(n,c)=>{ (c?oks:fails).push(n); console.log((c?'  ✓ ':'  ✗ ')+n); };
 let page;
@@ -27,7 +27,7 @@ await page.goto('http://localhost:8935/');
 await page.evaluate(()=>{ $('createMask').classList.remove('on'); showDemo(); });
 await page.waitForTimeout(500);
 ok('封面画在样张顶上', await page.evaluate(()=>{const i=document.querySelector('.coverwrap img');return !!i&&i.naturalWidth>300;}));
-ok('图标已换成美术出的那张', await page.evaluate(()=>($('appIcon').href||'').indexOf('data:image/png')===0));
+ok('图标挂的是 icon/ 下那张真文件（v3.4 起不再内嵌）', await page.evaluate(()=>/icon\/icon-180\.png$/.test($('appIcon').href||'')&&typeof ICON_IMG==='undefined'));
 await page.reload(); await page.waitForTimeout(400);
 
 console.log('\n【选界】');
@@ -114,15 +114,15 @@ ok('v3.0 批 A 十二张都到了，不再借图', await page.evaluate(()=>Objec
 ok('八张新机制横幅都接上了', await page.evaluate(()=>
   ['sc_d_tide','sc_w_tide','sc_s_tide','sc_war','sc_court','sc_h_oracle','sc_a_bone','sc_a_forest']
     .every(k=>SCENE_IMG[k])));
-ok('二十二张立绘都在', await page.evaluate(()=>Object.keys(POR_IMG).length===22));
+ok('二十六张立绘都在（v3.4 补进了 B2 批那四张）', await page.evaluate(()=>Object.keys(POR_IMG).length===26));
 // 头目立绘出一张接一张，这里只钉「已出的必须在」，缺的那几个走退回小头像
 ok('已出的四张头目立绘都在', await page.evaluate(()=>
   ['x_fallen_angel','x_vampire','x_oni','x_devourer'].every(k=>POR_IMG[k])));
-ok('还没出的头目立绘确实没混进来', await page.evaluate(()=>
-  ['x_boss_east','x_fox','x_witch','x_onryo'].every(k=>!POR_IMG[k])));
+ok('B2 批那四张头目立绘也进来了', await page.evaluate(()=>
+  ['x_boss_east','x_fox','x_witch','x_onryo'].every(k=>POR_IMG[k])));
 ok('十七种特型各有一张立绘', await page.evaluate(()=>
   AV_SLOTS.filter(x=>x.charAt(0)==='x'&&!Object.values(BOSS_AV).includes(x)).every(k=>k==='x_child'||POR_IMG[k])));
-ok('头目认脸：路西法用堕天使那张，没立绘的头目退回小头像', await page.evaluate(()=>avSlotOf({name:'路西法',avatar:'x_abyss'})==='x_fallen_angel'&&!!porOf({name:'路西法'})&&!porOf({name:'妲己'})&&avSlotOf({name:'妲己'})==='x_fox'));
+ok('头目认脸：路西法用堕天使那张，妲己用九尾那张', await page.evaluate(()=>avSlotOf({name:'路西法',avatar:'x_abyss'})==='x_fallen_angel'&&!!porOf({name:'路西法'})&&avSlotOf({name:'妲己'})==='x_fox'&&!!porOf({name:'妲己'})));
 await page.evaluate(()=>{ S.scene.location='云台观山门'; renderScene(); });
 await page.waitForTimeout(300);
 ok('正文区真的铺上了淡背景', await page.evaluate(()=>{

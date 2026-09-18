@@ -2,9 +2,9 @@
 // 用法：node test/s1.js（需 playwright；容器里用 PW_CHROME 指定 chromium）
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 const fails=[],oks=[];
 const ok=(n,c)=>{ (c?oks:fails).push(n); console.log((c?'  ✓ ':'  ✗ ')+n); };
 let page;
@@ -77,7 +77,12 @@ ok('存档记下了界', await page.evaluate(()=>S.realm==='东荒'));
 ok('NPC 带界字段', await page.evaluate(()=>S.npcs.every(n=>n.realm==='东荒')));
 ok('修为按东荒境界显示', (await page.textContent('#pAttrs')).includes('金丹')||(await page.textContent('#pAttrs')).includes('筑基')||(await page.textContent('#pAttrs')).includes('元婴'));
 ok('势力位阶按宗门翻（外门弟子）', (await page.textContent('#pSect')).includes('弟子'));
-ok('头像是程序生成的墨影', await page.evaluate(()=>(document.querySelector('#pFace .avatar').style.backgroundImage||'').includes('svg')));
+ok('有画像就用画像，没画像才退回墨影', await page.evaluate(()=>{
+  // 原来这条写的是 .includes('svg')——图集的 base64 里碰巧有 "svg" 三个字母，
+  // 所以一直是蒙对的。改成按 avCellStyle 有没有命中来判。
+  const bi=document.querySelector('#pFace .avatar').style.backgroundImage||'';
+  return avCellStyle(avSlotOf(S.player)) ? bi.indexOf('image/webp')>0 : bi.indexOf('image/svg')>0;
+}));
 ok('功法词卫会换掉别界的词', await page.evaluate(()=>normArt({name:'魔法飞弹诀',desc:'以魔力为引',style:'绝学',level:20}).name==='法术飞弹诀'));
 
 console.log('\n【跑几个回合】');

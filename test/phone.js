@@ -1,9 +1,9 @@
 // 手机适配细查：两种窄屏走一遍主要界面，找横向溢出、超宽元素、点不着的按钮
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 const fails=[],oks=[];
 const ok=(n,c,extra)=>{ (c?oks:fails).push(n); console.log((c?'  ✓ ':'  ✗ ')+n+(!c&&extra?'　'+extra:'')); };
 const SIZES=[[390,844,'iPhone 常见'],[360,740,'安卓窄屏']];

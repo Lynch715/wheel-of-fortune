@@ -1,9 +1,9 @@
 // S14 隐藏宝物
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 const fails=[],oks=[];
 const ok=(n,c)=>{ (c?oks:fails).push(n); console.log((c?'  ✓ ':'  ✗ ')+n); };
 let page;

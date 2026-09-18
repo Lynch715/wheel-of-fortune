@@ -1,9 +1,9 @@
 // S15 名望阶与三界寿元（规范 v3.3）
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 const fails=[],oks=[];
 const ok=(n,c)=>{ (c?oks:fails).push(n); console.log((c?'  ✓ ':'  ✗ ')+n); };
 let page;
@@ -116,10 +116,10 @@ ok('寿元那一行写明是哪一境给的', await page.evaluate(()=>{
   const t=$('pMeta').textContent; window.__meta=t; return t.includes('寿元400')&&t.includes('之寿'); }));
 
 console.log('\n【存档】');
-ok('存档版本到 22，老档能迁上来', await page.evaluate(async()=>{
-  if(SAVE_VERSION!==22) return false;
+ok('存档版本到 23，老档能迁上来', await page.evaluate(async()=>{
+  if(SAVE_VERSION!==23) return false;
   const d=JSON.parse(JSON.stringify(S)); d.v=21; d.player.lifespan=78; d.player.attributes['修为']=60;
-  const m=migrate(d); return m.v===22&&num(m.player.lifespan)>78; }));
+  const m=migrate(d); return m.v===23&&num(m.player.lifespan)>78; }));
 
 console.log('\n通过 '+oks.length+' 项，失败 '+fails.length+' 项');
 if(fails.length){ console.log('miss=',await page.evaluate(()=>window.__miss)); console.log('rk=',await page.evaluate(()=>window.__rk)); console.log('meta=',await page.evaluate(()=>window.__meta)); console.log('la=',await page.evaluate(()=>window.__la)); }

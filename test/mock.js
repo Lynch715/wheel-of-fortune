@@ -165,3 +165,23 @@ function sse(obj){
     +'data: '+JSON.stringify({choices:[{delta:{},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n';
 }
 module.exports.pickBody=pickBody; module.exports.sse=sse;
+
+/* 站点服务：v3.4 起页面会去拿 sw.js、site.webmanifest、icon/*，
+   全用 text/html 糊弄过去会让 service worker 注册报 MIME 错。按真文件发。 */
+const _fs=require('fs'), _path=require('path');
+const _ROOT=_path.join(__dirname,'..');
+const _MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
+  '.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8',
+  '.png':'image/png','.ico':'image/x-icon','.webp':'image/webp','.css':'text/css; charset=utf-8'};
+function serve(q,r){
+  let p=decodeURIComponent((q.url||'/').split('?')[0]);
+  if(p==='/'||p==='') p='/index.html';
+  const f=_path.join(_ROOT,p.replace(/^\/+/,''));
+  if(!f.startsWith(_ROOT)||!_fs.existsSync(f)||_fs.statSync(f).isDirectory()){ r.writeHead(404); return r.end('404'); }
+  const buf=_fs.readFileSync(f);
+  // 按 GitHub Pages 的路数发缓存头：sw 装的时候才不会把整页再拉一遍
+  r.writeHead(200,{'Content-Type':_MIME[_path.extname(f)]||'application/octet-stream',
+    'Cache-Control':'max-age=600','ETag':'"'+buf.length+'-'+_fs.statSync(f).mtimeMs+'"'});
+  r.end(buf);
+}
+module.exports.serve=serve;

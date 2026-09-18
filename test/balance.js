@@ -2,9 +2,9 @@
 // 用法：LIVES=60 YEARS=30 node test/balance.js
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 const LIVES=+(process.env.LIVES||60), YEARS=+(process.env.YEARS||30);
 (async()=>{
 srv.listen(8951);

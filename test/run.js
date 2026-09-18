@@ -2,9 +2,9 @@
 // 只找三样东西：页面报错、跨界泄漏、跑崩。用法：RUNS=20 node test/run.js
 const {chromium}=require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
-const {pickBody,sse}=require('./mock');
+const {pickBody,sse,serve}=require('./mock');
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'));
-const srv=http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}); r.end(html); });
+const srv=http.createServer(serve);
 
 const RUNS=+(process.env.RUNS||20), TURNS=+(process.env.TURNS||12);
 const BIRTH=['东荒','西陆','樱洲'];
