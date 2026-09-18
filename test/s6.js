@@ -264,7 +264,7 @@ ok('头目按名字记，同一个不重复，杂兵不算', await page.evaluate
 }));
 ok('头目一共 22 位，按层摆好，吞噬者守在第六层', await page.evaluate(()=>
   ABYSS_BOSSES.length===22&&ABYSS_BOSSES.filter(b=>b.layer===5).length===7&&bossOf('吞噬者').layer===6&&bossOf('墟使').layer===1
-  &&ABYSS_BOSSES.every(b=>b.wu===60+6*b.layer&&b.weak&&b.title)));
+  &&ABYSS_BOSSES.every(b=>bossWu(b)===(b.name===ABYSS_LORD?105:60+6*b.layer)&&b.weak&&b.title)));   // v3.3：修为改比例制，常规档还原成 60+6×层
 ok('联署那一套删掉了', await page.evaluate(()=>typeof lordSigned==='undefined'&&typeof OUTER_CLANS==='undefined'));
 ok('三条齐了、人在墟心才出讨伐按钮', await page.evaluate(()=>{
   S.abyssMonths=12; S.bossKilled=['别西卜','波旬','该隐']; S.reachedCore=true;

@@ -154,7 +154,7 @@ ok('地名表里的地名直接对上横幅', await page.evaluate(()=>{
   S.realm=r; S.scene.location=l;
   return k==='sc_w_tavern' && k2==='sc_s_school';
 }));
-ok('提示词没胖失控（开局那回 <16000 字，v3.0 名录加了势力人物）', await page.evaluate(()=>turnPrompt('试试',{fate:10,months:1}).length<16000));
+ok('提示词没胖失控（开局那回 <16800 字；v3.3 起万界榜开局就是满榜十人）', await page.evaluate(()=>turnPrompt('试试',{fate:10,months:1}).length<16800));
 
 console.log('\n【v1.1 口径】');
 ok('轮枢随时可去，不看轮转', await page.evaluate(()=>{

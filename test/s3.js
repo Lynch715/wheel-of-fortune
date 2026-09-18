@@ -131,23 +131,23 @@ ok('掷 20 必成', await page.evaluate(()=>{ const d=Math.random; let n=0; Math
 ok('掷 1 必败', await page.evaluate(()=>{ const d=Math.random; Math.random=()=>0; const r=rollCheck('学识',1); Math.random=d; return r.success===false; }));
 
 console.log('\n【v1.2 外观年龄与文风】');
-ok('外观年龄 = 实岁 ÷ 寿元 × 78', await page.evaluate(()=>{
+ok('外观年龄两段式：童年照实岁，成年之后按寿元摊开（v3.3）', await page.evaluate(()=>{
   const p=S.player, a0=p.age, l0=p.lifespan;
   p.age=120; p.lifespan=200; const look=lookAge(p);
   p.age=a0; p.lifespan=l0;
-  return look===47;
+  return look===52;
 }));
 ok('提示词按外观年龄写，不按实岁', await page.evaluate(()=>{
   const p=S.player, a0=p.age, l0=p.lifespan;
   p.age=120; p.lifespan=200;
   const t=stateBlocks();
   p.age=a0; p.lifespan=l0;
-  return t.includes('看着约47岁')&&t.includes('不要按实岁');
+  return t.includes('看着约52岁')&&t.includes('不要按实岁');
 }));
 ok('头像也按外观年龄落桶', await page.evaluate(()=>{
   const a=avBucket('男',210,'东荒');
-  const b=avBucket('男',lookAge({age:210,lifespan:300}),'东荒');
-  return a.join()!==b.join()&&lookAge({age:210,lifespan:300})===55;
+  const b=avBucket('男',lookAge({age:210,lifespan:600}),'东荒');
+  return a.join()!==b.join()&&lookAge({age:210,lifespan:600})===39;   // v3.3 两段式：寿元600的人两百一十岁看着三十九
 }));
 ok('明说了要留下就不硬推转场', await page.evaluate(()=>{
   S.nudgeSeq=0; S.turn=0;

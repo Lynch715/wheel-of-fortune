@@ -838,7 +838,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=21;
+const SAVE_VERSION=22;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -1047,6 +1047,11 @@ function migrate(s){
       if(t&&!s.treasures[t.key]){ it.treasure=t.key; it.name=t.name; if(t.cat==='法宝') it.bonus=t.bonus||it.bonus; if(t.ward) it.ward=true; if(t.charms) it.charms=t.charms; if(t.fateTwice) it.uses=t.fateTwice; s.treasures[t.key]={state:'held',seen:true}; }
     }
     s.v=21;
+  }
+  if(s.v<22){
+    // 名望阶与三界寿元（规范 v3.3）：老档补算一次
+    try{ const _S=S; S=s; fameSync(); lifeSync(); S=_S; }catch(e){ console.warn('v22 迁移',e); }
+    s.v=22;
   }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
@@ -1313,12 +1318,16 @@ function growthCap(){
   if(WCAP()>100&&w>100) cap=Math.round(cap*Math.min(6,1+(w-100)/200));   // 水涨船高，但最多快六倍
   return Math.max(1,cap);
 }
-/* 外观年龄（规范 v1.2 第 2 节）：实际年龄 ÷ 寿元 × 78。
-   正文、头像分桶、提示词里的年龄口径一律用它；实际年龄只用来记时。 */
+/* 外观年龄（规范 v1.2 第 2 节，v3.3 改两段式）：
+   凡人还是「实际年龄 ÷ 寿元 × 78」；寿元过了凡人之数的，
+   长的只是成年之后那一段——童年该几岁就是几岁，
+   否则寿元一上千，四十岁的人会被写成看着三岁。 */
 function lookAge(p){
   p=p||(S&&S.player); if(!p) return 0;
-  const ls=Math.max(20,num(p.lifespan)||78);
-  return Math.max(1,Math.round(num(p.age)/ls*78));
+  const ls=Math.max(20,num(p.lifespan)||78), a=Math.max(0,num(p.age));
+  if(ls<=78) return Math.max(1,Math.round(a/ls*78));
+  if(a<=20) return Math.max(1,Math.round(a));
+  return Math.max(1,Math.round(20+(a-20)/(ls-20)*58));
 }
 function ageNote(){
   const r=lifeRatio();
@@ -1433,7 +1442,8 @@ const RK_NOTE_DEFAULT=['一手快刀无人能接','掌力开碑裂石','剑法�
 function rkNotes(){ return (jie().rkNote)||RK_NOTE_DEFAULT; }
 // 上榜门槛：不能让个修为四十的路人挤进当世前十
 function rankFloor(){
-  const live=(S.world&&S.world.ranking||[]).filter(r=>r.alive!==false);
+  // 名望席不算数：三清往那一杵，谁都上不了榜（规范 v3.3 第 1.3 节）
+  const live=(S.world&&S.world.ranking||[]).filter(r=>r.alive!==false&&!isFamed(r.name));
   if(!live.length) return 62;
   return Math.max(58, Math.min.apply(null,live.map(r=>num(r['修为'])))-5);
 }
@@ -1451,7 +1461,7 @@ function rankCatchUp(){
   if(WCAP()<=100||!S||!S.world) return;
   const lv=powerLevel();
   for(const r of (S.world.ranking||[])){
-    if(!r||r.alive===false) continue;
+    if(!r||r.alive===false||isFamed(r.name)) continue;   // 名望席自己跟着基准走，不用追
     const gap=lv-num(r['修为']);
     if(gap<=4) continue;
     if(Math.random()>=0.4) continue;
@@ -1464,6 +1474,8 @@ function rankCatchUp(){
 function rankRefresh(){
   if(!S||!S.world) return;
   rankCatchUp();
+  fameSync();
+  lifeSync();
   S.world.ranking=S.world.ranking||[];
   S.world.fallen=S.world.fallen||[];
   const rk=S.world.ranking;
@@ -1477,20 +1489,25 @@ function rankRefresh(){
     if(!S.world.fallen.find(x=>x.name===d.name)) S.world.fallen.push({name:d.name,faction:d.faction||'散人','修为':num(d['修为']),when:S.date||''});
   }
   while(S.world.fallen.length>20) S.world.fallen.shift();
-  const live=rk.filter(r=>r.alive!==false);
+  // 前六席：引擎按名望表铸（规范 v3.3 第 1.3 节）
+  const seats=fameSeatRows(rk);
+  const seatNames=new Set(seats.map(r=>r.name));
+  const openSeats=10-seats.length;
+  const live=rk.filter(r=>r.alive!==false&&!seatNames.has(r.name));
   const onBoard=new Set(live.map(r=>r.name));
   const floor=rankFloor();
   // 认识的人里够格的顶上来
-  const cands=(S.npcs||[]).filter(x=>x.alive&&!onBoard.has(x.name)&&num(x['修为'])>=floor)
+  const cands=(S.npcs||[]).filter(x=>x.alive&&!onBoard.has(x.name)&&!seatNames.has(x.name)&&num(x['修为'])>=floor)
     .map(x=>({name:x.name,faction:x.faction||'散人','修为':num(x['修为']),note:x.signature||x.identity||'',alive:true,age:num(x.age)||40,_new:true}));
   const pool=live.concat(cands).sort((a,b)=>num(b['修为'])-num(a['修为']));
-  const next=pool.slice(0,10);
+  const fresh=pool.slice(0,openSeats);
+  const next=seats.concat(fresh).sort((a,b)=>num(b['修为'])-num(a['修为']));
   const nextNames=new Set(next.map(r=>r.name));
   for(const r of next) if(r._new) news(`${r.name}修为已足以名列万界榜，四方为之侧目`);
   for(const r of live) if(!nextNames.has(r.name)) news(`${r.name}跌出了万界榜`);
   for(const r of next) delete r._new;
   S.world.ranking=next;
-  const vacant=10-next.length;
+  const vacant=openSeats-fresh.length;
   S.world.vacant=vacant;
   // 空了两回合还没人填，引擎自己造一个，别让榜一直缺角
   if(vacant>0){
@@ -1499,8 +1516,8 @@ function rankRefresh(){
       const fs=(S.world.factions||[]).filter(f=>f&&f.name&&f.realm!=='幽墟');
       const lv=powerLevel();
       for(let i=0;i<vacant;i++){
-        const w=WCAP()>100 ? clampW(Math.max(floor+2, Math.round(lv*(0.55+Math.random()*0.5))))
-                           : clamp(floor+rnd(2,10),40,98);
+        const w=WCAP()>100 ? clampW(Math.max(floor+2, Math.min(Math.round(fameBase()*0.75), Math.round(lv*(0.55+Math.random()*0.5)))))
+                           : clamp(floor+rnd(2,10),40,92);
         const f=fs.length&&Math.random()<0.7?pick(fs).name:'散人';
         const nm=makeRankName();
         S.world.ranking.push({name:nm,faction:f,realm:jieName(),'修为':w,note:pick(rkNotes()),alive:true,age:rnd(35,60)});
@@ -1519,7 +1536,8 @@ function rankRefresh(){
    寿元 200 的人活到 120 仍是盛年。寿元只能靠奇遇涨：灵药、内功大成、高人洗髓。 */
 function lifespanOf(p){ p=p||S.player; const v=num(p&&p.lifespan); return v>0?v:78; }
 function lifeRatio(){ const p=S.player; if(!p) return 0; return num(p.age)/Math.max(20,lifespanOf(p)); }
-function lifeCap(){ return num(fdm().lifeCap)||92; }
+// 奇遇的天花板；境界给的寿元比它高时，以境界为准（规范 v3.3 第 2.3 节）
+function lifeCap(){ return Math.max(num(fdm().lifeCap)||92, myLifeOfWu(S&&S.player&&S.player.attributes&&S.player.attributes['修为'])); }
 // 奇遇给寿元：单次有上限，总量不超过本档的天花板
 function grantLifespan(n,why){
   const p=S.player; if(!p) return 0;
@@ -2618,7 +2636,7 @@ function challengeDevourer(){
   if(!n){
     const b=ABYSS_BOSSES.find(x=>x.name===ABYSS_LORD);
     n=normNpc({name:ABYSS_LORD, gender:'男', age:999, identity:`幽墟之主·${b.title}`, faction:'幽墟头目',
-      alignment:'邪道', personality:['贪'], appearance:'看不清形体，只有一张越张越大的嘴', '修为':b.wu, '谈吐':20,
+      alignment:'邪道', personality:['贪'], appearance:'看不清形体，只有一张越张越大的嘴', '修为':bossWu(b), '谈吐':20,
       signature:b.line, relation:'素未谋面', '好感度':0, alive:true, secret:b.weak, notes:'守在墟心门口', realm:'幽墟'});
     S.npcs.push(n);
   }
@@ -2653,7 +2671,7 @@ const ABYSS_BOSSES=[
  {name:'蚀主',title:'侵蚀化身',from:'本土',layer:5,line:'幽墟意志的碎片，专门腐蚀强者',weak:'没有固定形体，怕三界同源的法宝'},
  {name:'吞噬者',title:'幽墟之主',from:'本土',layer:6,line:'幽墟最强的那一个，守在墟心门口',weak:'只认力量，打得过它才让路'}
 ];
-ABYSS_BOSSES.forEach(b=>{ b.wu=60+6*b.layer; });
+ABYSS_BOSSES.forEach(b=>{ b.layer=num(b.layer); });   // 修为不再写死，见 bossWu()（规范 v3.3）
 function bossOf(name){ return ABYSS_BOSSES.find(b=>b.name===name)||null; }
 function bossDead(b){ if((S.bossKilled||[]).indexOf(b.name)>=0) return true; const n=findNpc(b.name); return !!(n&&n.alive===false); }
 function bossBlock(){
@@ -3583,6 +3601,191 @@ const NPC_SAME=[
   ['鬼切','髭切','源氏宝刀，髭切后来改名鬼切'],
 ];
 
+
+/* ================= 名望阶（规范 v3.3 第 1 节）=================
+   名单上的人物不再由模型给数字：按历史地位分五档，
+   档位换算成「当前难度天花板的百分之多少」——难度一变他们跟着变，永远在顶端。
+   常规两档天花板就是 100；一日千里一档跟着水位走，主角练到本档上限才与至高打平。 */
+const FAME_RATIO={T1:1.00,T2:0.95,T3:0.88,T4:0.80,T5:0.70};
+const FAME_TIERS={
+ '东荒':{
+  T1:['太上老君','元始天尊','通天教主','如来佛祖','女娲娘娘'],
+  T2:['玉皇大帝','王母娘娘','酆都大帝','燃灯古佛','观音菩萨','地藏王菩萨','镇元子','菩提祖师','孔宣','孙悟空','孔子'],
+  T3:['玄都大法师','广成子','多宝道人','金灵圣母','赵公明','云霄','文殊菩萨','普贤菩萨','杨戬','哪吒','弥勒佛','药师佛','东岳大帝','紫微大帝','真武大帝','阎罗王','六耳猕猴','九灵元圣','大鹏金翅雕','牛魔王','陆压','张天师','庄子','孟子'],   // 燃灯道人＝燃灯古佛、慈航＝观音菩萨，都归在 T2，别名自会认（见 NPC_SAME）
+  T4:['无当圣母','龟灵圣母','琼霄','碧霄','闻仲','云中子','惧留孙','雷震子','姜子牙','太白金星','托塔李天王','钟馗','崔判官','敖广','铁扇公主','红孩儿','吕洞宾','陈抟','列子','荀子','董仲舒','朱熹','王阳明','乌巢禅师','金角','银角','猪八戒','沙僧','小白龙','当朝人皇'],
+  T5:['尹喜','孟婆','敖闰','敖钦','敖顺','黑熊精','黄风怪','梅山七怪','轩辕坟三妖','唐僧']
+ },
+ '西陆':{
+  T1:['梅林','亚瑟王','提亚马特','巴哈姆特'],
+  T2:['教皇','圣女贞德','法夫纳','尼德霍格','巫妖王','兰斯洛特','加拉德瑞尔'],
+  T3:['查理曼','狮心王理查','高文','珀西瓦尔','加拉哈德','罗兰','贝奥武夫','史矛革','精灵王','瑟兰迪尔','都灵','德古拉','浮士德','帕拉塞尔苏斯','尼古拉·弗拉梅尔'],
+  T4:['阿尔弗雷德','伊莎贝拉','路易九世','大主教','审判官','圣殿骑士团长','莱戈拉斯','索林','布洛克','铁砧王','格罗姆','萨尔','血牙','弗兰肯斯坦','黑骑士','兽人酋长','海盗王'],
+  T5:['苦修圣徒','占星师','炼金术师','死灵法师','游吟诗人','东方商队首领','沙漠苏丹','佣兵王']
+ },
+ '樱洲':{
+  T1:['安倍晴明','大天狗'],
+  T2:['芦屋道满','九尾狐','源赖光','宫本武藏'],
+  T3:['佐佐木小次郎','柳生十兵卫','上泉信纲','绯村剑心','服部半藏','风魔小太郎','渡边纲','坂田金时','雪女','贺茂忠行','贺茂保宪','安倍泰亲','上杉谦信','武田信玄','织田信长','真田幸村'],
+  T4:['冲田总司','土方岁三','猿飞佐助','雾隐才藏','甲贺弦之介','百地三太夫','德川家康','丰臣秀吉','足利尊氏','北条时政','岛津义弘','伊达政宗','毛利元就','土御门家','理事长'],
+  T5:['校长','班主任','剑道师范','阴阳术导师','忍法教官','学生会长']
+ },
+ '幽墟':{
+  T1:[],
+  T2:['无天','魔罗'],
+  T3:['玉藻前','酒吞童子','摩根勒菲'],
+  T4:['申公豹','鬼切','茨木童子','堕落圣骑士','黑教皇','轮回商人'],
+  T5:[]
+ }
+};
+const FAME_ORDER=['T1','T2','T3','T4','T5'];
+const FAME_OF={}, FAME_REALM={};
+for(const _rk in FAME_TIERS) for(const _t of FAME_ORDER) for(const _n of (FAME_TIERS[_rk][_t]||[])){ FAME_OF[_n]=_t; FAME_REALM[_n]=_rk; }
+// 当前难度的修为天花板：常规两档就是 100；一日千里一档跟着水位走，封顶 wcap
+function fameBase(){
+  const cap=WCAP();
+  if(cap<=100) return 100;
+  return Math.max(150, Math.min(cap, Math.round(powerLevel()*1.05)));
+}
+// 名字对得上就认，别名（燃灯道人＝燃灯古佛这类）一并认
+function fameTierOf(name){
+  name=String(name||'').trim(); if(!name) return '';
+  if(FAME_OF[name]) return FAME_OF[name];
+  for(const it of NPC_SAME){
+    if(it[0]===name&&FAME_OF[it[1]]) return FAME_OF[it[1]];
+    if(it[1]===name&&FAME_OF[it[0]]) return FAME_OF[it[0]];
+  }
+  return '';
+}
+function isFamed(name){ return !!fameTierOf(name); }
+function fameRealmOf(name){
+  name=String(name||'').trim();
+  if(FAME_REALM[name]) return FAME_REALM[name];
+  for(const it of NPC_SAME){
+    if(it[0]===name&&FAME_REALM[it[1]]) return FAME_REALM[it[1]];
+    if(it[1]===name&&FAME_REALM[it[0]]) return FAME_REALM[it[0]];
+  }
+  return '';
+}
+// 同档内错开一点，免得看着像张表：按姓名 + 主角姓名定，一局之内稳定，换一局才变
+function fameSeed(name){
+  const k=String(name||'')+'|'+((S&&S.player&&S.player.name)||'');
+  let h=0; for(let i=0;i<k.length;i++) h=(h*131+k.charCodeAt(i))|0;
+  return Math.abs(h);
+}
+// 名人该有的修为：只作下限，剧情把他抬得更高就随他
+function fameWu(name){
+  const t=fameTierOf(name); if(!t) return 0;
+  const base=fameBase();
+  let v=Math.round(base*FAME_RATIO[t]);
+  if(t!=='T1') v+=(fameSeed(name)%5)-2;
+  return Math.max(1,Math.min(base,v));
+}
+// 幽墟头目：原来写死 60+6*层，改成同一套比例制；墟心那位永远高过至高一线
+function bossRatio(b){ return (b&&b.name===ABYSS_LORD)?1.05:(60+6*num(b&&b.layer))/100; }
+function bossWu(b){ return Math.max(1,Math.round(fameBase()*bossRatio(b))); }
+// 名人挂在哪个势力下（铸榜时给 faction 用）
+function fameFaction(nm){
+  for(const rk in FACTIONS) for(const f of (FACTIONS[rk]||[])){
+    if(f.leader===nm) return f.name;
+    if((f.members||[]).indexOf(nm)>=0) return f.name;
+  }
+  return '散人';
+}
+/* 名录与榜上的名人，修为只抬不压；顺带按境界补上寿元，
+   免得太上老君被写成一个四十来岁、会老死的人。 */
+function fameSync(){
+  if(!S) return;
+  for(const n of (S.npcs||[])){
+    if(!n||!n.name) continue;
+    const w=fameWu(n.name); if(!w) continue;
+    if(num(n['修为'])<w) n['修为']=w;
+    if(!num(n.lifespan)){ const ls=lifeOfWu(n['修为'], n.realm||fameRealmOf(n.name)); if(ls>0) n.lifespan=ls; }
+  }
+  for(const r of ((S.world&&S.world.ranking)||[])){
+    if(!r||!r.name) continue;
+    const w=fameWu(r.name); if(w&&num(r['修为'])<w) r['修为']=w;
+  }
+}
+/* 万界榜前六席（规范 v3.3 第 1.3 节）：引擎按名望表铸，各界混排，
+   只取已经铸过格局的那几界——没去过的地方不剧透。后四席留给当世新秀。 */
+const FAME_SEATS=6;
+function fameSeatPool(){
+  const forged=new Set(((S&&S.forged&&S.forged.length)?S.forged:[jieName()]));
+  const out=[];
+  for(const rk in FAME_TIERS){
+    if(rk==='幽墟'||!forged.has(rk)) continue;
+    for(let i=0;i<4;i++) for(const nm of (FAME_TIERS[rk][FAME_ORDER[i]]||[])) out.push({name:nm,realm:rk,ord:i});
+  }
+  out.sort((a,b)=> a.ord-b.ord || (fameSeed(a.name)%9973)-(fameSeed(b.name)%9973) );
+  return out;
+}
+function fameSeatRows(prev){
+  const dead=new Set((S.npcs||[]).filter(n=>n&&n.alive===false).map(n=>n.name));
+  for(const r of (prev||[])) if(r&&r.alive===false) dead.add(r.name);
+  const rows=[], old={};
+  for(const r of (prev||[])) if(r&&r.name) old[r.name]=r;
+  for(const c of fameSeatPool()){
+    if(rows.length>=FAME_SEATS) break;
+    if(dead.has(c.name)) continue;
+    const nn=findNpc(c.name);
+    const w=Math.max(fameWu(c.name), nn?num(nn['修为']):0, old[c.name]?num(old[c.name]['修为']):0);
+    const notes=((JIE[c.realm]&&JIE[c.realm].rkNote)||RK_NOTE_DEFAULT);
+    rows.push({name:c.name, faction:(nn&&nn.faction)||fameFaction(c.name), realm:c.realm,
+               '修为':w, note:(old[c.name]&&old[c.name].note)||notes[fameSeed(c.name)%notes.length],
+               alive:true, age:(nn&&num(nn.age))||999, famed:true});
+  }
+  return rows;
+}
+/* ================= 三界寿元（规范 v3.3 第 2 节）=================
+   修为跨过一境，寿元就抬到那一境的底线，只升不降。
+   用哪张表看出身之界与主修那条路——和 tierTable() 同一口径：
+   东荒修的就是长生，所以明显长过另两界；西陆斗气走肉身，长得最慢。 */
+const LIFE_TIERS={
+ '东荒':{'':[[0,80],[18,100],[32,150],[46,250],[60,400],[74,600],[86,1000],[95,3000],[130,99999]]},
+ '西陆':{'魔力':[[0,80],[22,95],[42,120],[64,200],[86,400],[130,1200]],
+         '斗气':[[0,80],[36,90],[58,110],[79,140],[88,180],[96,500]]},
+ '樱洲':{'咒力':[[0,80],[24,90],[46,110],[68,150],[88,300],[130,800]],
+         '气':  [[0,80],[22,85],[46,100],[70,130],[88,200],[130,400]]}
+};
+function lifeTable(realm,path){
+  const t=LIFE_TIERS[realm]; if(!t) return LIFE_TIERS['东荒'][''];
+  if(path&&t[path]) return t[path];
+  const d=(JIE[realm]&&JIE[realm].pathDefault)||'';
+  return t[d]||t['']||t[Object.keys(t)[0]];
+}
+// 本档成长尺度把表压到几成：一日千里全额，循序渐进三成（封顶400），苦修慢磨不启用
+function lifeScale(){ const c=num(fdm().lifeCap)||92; return c>=200?1:(c>=100?0.30:0); }
+function lifeScaleCap(){ const c=num(fdm().lifeCap)||92; return c>=200?99999:400; }
+function lifeOfWu(v,realm,path){
+  const sc=lifeScale(); if(sc<=0) return 0;
+  const tb=lifeTable(realm||'东荒',path||''); v=num(v);
+  let ls=tb[0][1]; for(const it of tb) if(v>=it[0]) ls=it[1];
+  if(sc<1) ls=Math.min(lifeScaleCap(), Math.round(80+(ls-80)*sc));
+  return ls;
+}
+// 主角这一局用哪张表：出身之界 + 主修那条路
+function myLifeOfWu(v){ return lifeOfWu(v,(S&&S.homeRealm)||'东荒',(typeof pathOf==='function')?pathOf():''); }
+// 破境就提寿：只升不降
+function lifeSync(){
+  const p=S&&S.player; if(!p||!p.attributes) return 0;
+  const want=myLifeOfWu(p.attributes['修为']);
+  const before=lifespanOf(p);
+  if(!(want>before)) return 0;
+  p.lifespan=want;
+  const t=tierOf(num(p.attributes['修为']));
+  ledger(`修为入${t}，寿元 ${before} → ${want}`);
+  news(`${p.name}修为已入${t}，寿数大增`);
+  return want-before;
+}
+// 面板上那句「（化神之寿）」
+function lifeTierNote(){
+  const p=S&&S.player; if(!p||!p.attributes) return '';
+  if(lifeScale()<=0) return '';
+  const want=myLifeOfWu(p.attributes['修为']);
+  if(want<=80||num(p.lifespan)<want) return '';
+  return tierOf(num(p.attributes['修为']))+'之寿';
+}
+
 // 某人的旧交：两头都算，外加「同一个人」的别称
 function tiesOf(name){
   name=String(name||'').trim(); if(!name) return [];
@@ -3617,7 +3820,7 @@ function tiesBlock(){
   }
   lines.sort((x,y)=>(y.both?1:0)-(x.both?1:0));
   const same=NPC_SAME.filter(([a,b])=>here.has(a)||here.has(b)).map(([a,b,r])=>`${a}＝${b}：${r}`);
-  const body=same.concat(lines.slice(0,36).map(x=>x.t));
+  const body=same.concat(lines.slice(0,28).map(x=>x.t));   // v3.3：榜首换成名人之后在场的名人多了，行数收一档
   return body.length?`\n【名人旧交（这些人本来就认得，写到其中一个时，另一个不是陌生人；「甲—乙：……」说的是甲对乙；称呼、态度、恩怨都要对得上）】\n${body.join('\n')}`:'';
 }
 /* ================= 隐藏宝物（规范 v3.2）=================
@@ -3799,6 +4002,7 @@ function poolNames(realm){ return (NPC_POOL[realm]||[]).flatMap(g=>g[1].split('�
 function poolBlock(realm){
   const g=NPC_POOL[realm]; if(!g) return '';
   return `\n- 本界有名有姓的人物（写到有来头的人时优先用这些，路人小角色才按起名路数现造）：${g.map(x=>`${x[0]}——${x[1]}`).join('；')}`
+    +`\n- 这几位的修为由引擎定死，你不要给数字；写他们出手一律按「远在主角之上」`
     +(NPC_ROLES[realm]?`\n- 本界常见的身份（这些是头衔，不是名字）：${NPC_ROLES[realm]}`:'')
     +(realm==='幽墟'?'':`\n- ${ABYSS_GONE.join('、')}这几位已经堕进了幽墟，${realm}只剩关于他们的传闻，不会在这里露面`);
 }
@@ -4160,7 +4364,7 @@ function worldPrompt(opts){
 请为「${jieName()}」这一界铸造当世格局，一切须合【当界名录】。
 这一界的势力已经定下，不要另编：${FACTIONS[jieName()].map(f=>`${f.name}（${f.alignment}，首领${f.leader}）`).join('、')}。
 要求：
-- ranking：万界榜上本界当世前十高手，修为75至98之间、由高到低排列。人选优先从【当界名录】里「本界有名有姓的人物」挑，最多两位名单外的（要合本界路数）；faction 填上面那些势力名之一或「散人」；各带成名绝技或一句评价。
+- ranking：只列**榜尾的当世新秀**四位（榜首那几席是名单上的大人物，由引擎自己排，你不要写他们）。修为70至88之间、由高到低排列；人选是名单之外、合本界路数的成名人物；faction 填上面那些势力名之一或「散人」；各带成名绝技或一句评价。
 - events：当世三件正在发生的大事（一句话一条），可以牵涉上面的势力。
 ${JSON_RULE}
 输出格式：
@@ -4169,7 +4373,7 @@ ${JSON_RULE}
 请为「${jieName()}」这一界铸造当世格局，一切须合【当界名录】。${bg}要求：
 - factions：6至8个势力（正派、邪道、中立各色都要有），各有 type（势力类型，只能从【当界名录】的势力类型里挑一个）、power（势力强弱0-100）、首领姓名、一句话简介。
 - 势力名、首领名、简介都要是这一界的路数，不许混进别界的词。
-- ranking：万界榜上当世前十高手，修为75至98之间、由高到低排列，各有所属势力（可与factions对应，也可是散人）、成名绝技或一句评价。姓名要有辨识度、合本界的味道，不要雷同。这一程只列本界的人物。
+- ranking：只列**榜尾的当世新秀**四位（榜首那几席是名单上的大人物，由引擎自己排，你不要写他们）。修为70至88之间、由高到低排列，各有所属势力（可与factions对应，也可是散人）、成名绝技或一句评价。姓名要有辨识度、合本界的味道，不要雷同。这一程只列本界的人物。
 - events：当世三件正在发生的大事（一句话一条）。
 ${JSON_RULE}
 输出格式：
@@ -4359,7 +4563,7 @@ ${judge.convo?convoAfterReq():`请推演本回合。要求：
 - 主角把功夫教给别人时，写 taughtNpc:[{"name":"NPC姓名","art":"功法名"}]，引擎会记下来。
   已经写在【主角面板】arts 里的功法，任何人都不可以再「传授」给主角一遍，也不可以把对应的典籍当礼物送他——
   那是他早就会的；其中有几门还是他自己教出去的，更不可能由对方回传。要给就给他没有的。
-- 寿元只有奇遇能长（千年灵药、内功一路大成、高人易筋洗髓、异人相授驻颜之法之类），写进playerChanges.lifespan（增量）与lifespanReason（一句话缘由），并在剧情里把这场奇遇写足。寻常疗伤进补一律不许加寿元；给多少由引擎裁定，你只管提。
+- 寿元随境界自长（破一境引擎自己就提上去了），这一项不用你写。只有奇遇另给的才写：千年灵药、内功大成、高人洗髓、驻颜之法之类，写进playerChanges.lifespan（增量）与lifespanReason（一句话缘由），并把这场奇遇在剧情里写足。寻常疗伤进补一律不许加寿元。
 - 初次登场的新NPC写入newNpcs（完整面板含secret，不得简化）；一回合最多添2人，宁可少不可滥。已有NPC的变化写入npcUpdates；若剧情揭开了某NPC的秘密，写secretRevealed:true。
 - npcEvents写1-2条相识NPC之间的互动琐事或人生进展（嫁娶、交恶、生死等，须有因果），**只写【眼下要紧的人】和【随行的人】里的、跟主角同在一界的人**；别界的旧识不写进 npcEvents，他们的消息至多一条，放进 rumors，并写明是从哪一界传来的。
 - rumors**固定写两条**：一条本界的，一条轮枢传来的异界风闻（点明是哪一界的事）。万界榜人物或势力有变动时写rankingUpdates/factionUpdates。
@@ -4677,11 +4881,13 @@ const clamp=(v,lo=0,hi=100)=>Math.max(lo,Math.min(hi,Math.round(v)));
    所以修为练上去之后该碾压的地方就是碾压——这是这一档要的爽。 */
 function WCAP(){ const f=(typeof fdm==='function')&&fdm(); return (f&&f.wcap)||100; }
 const clampW=v=>Math.max(0,Math.min(WCAP(),Math.round(num(v))));
-// 当世水位：万界榜最高的那个人与主角，取高者（最低 80，免得开局就飘）
+/* 当世水位：万界榜最高的那个人与主角，取高者（最低 80，免得开局就飘）。
+   v3.3 起要把名望席排除在外：名望席的修为本来就是按水位算出来的，
+   再让它回过头来抬水位，一回合涨 5%，几十回合就自己飞到天上去了。 */
 function powerLevel(){
   let top=80;
   const rk=(S&&S.world&&S.world.ranking)||[];
-  for(const r of rk) if(r&&r.alive!==false) top=Math.max(top,num(r['修为']));
+  for(const r of rk) if(r&&r.alive!==false&&!isFamed(r.name)) top=Math.max(top,num(r['修为']));
   if(S&&S.player&&S.player.attributes) top=Math.max(top,num(S.player.attributes['修为']));
   return top;
 }
@@ -4890,6 +5096,7 @@ function mergeWorld(w, realmKey){
     fallen: old.fallen||[], vacant: old.vacant||0
   };
   (S.forged=S.forged||[]).push(w.__realm);
+  fameSync(); rankRefresh();               // 新铸一界，名望席跟着重排（规范 v3.3）
   recalcLords(true);                        // 头一回到这一界，那位「传闻中的界主」这下落实了
 }
 function dedupeRank(list){
@@ -4897,7 +5104,7 @@ function dedupeRank(list){
   for(const r of list){ if(seen.has(r.name)) continue; seen.add(r.name); out.push(r); }
   return out;
 }
-function applyWorld(w){ if(!w) return; S.world=worldShape(w); S.forged=[w.__realm||jieName()]; registerSect(); recalcLords(true); }
+function applyWorld(w){ if(!w) return; S.world=worldShape(w); S.forged=[w.__realm||jieName()]; registerSect(); fameSync(); rankRefresh(); recalcLords(true); }
 function worldShape(w){
   return {
     factions:FACTIONS[w.__realm||jieName()]?factionSeed(w.__realm||jieName()):(w.factions||[]).filter(f=>f&&f.name).map(f=>({name:f.name,type:plain(f.type)||'',realm:w.__realm||jieName(),alignment:f.alignment||'中立',power:clamp(num(f.power)),leader:f.leader||'',desc:f.desc||''})),
@@ -4980,6 +5187,7 @@ function applyTurn(d, action, judge){
     if(failed&&dv>0) dv=Math.min(dv,1);
     p.attributes[k]=(k==='修为'?clampW(p.attributes[k]+dv):clamp(p.attributes[k]+dv)); lastDeltas[k]=num(lastDeltas[k])+dv;
   }
+  { const g=lifeSync(); if(g) lastDeltas['寿元']=num(lastDeltas['寿元'])+g; }   // 破境提寿（规范 v3.3）
   // 气血
   let hpd=num(ch.hp);
   if(judge&&judge.duel) hpd=Math.min(hpd,0); // 比武已由引擎结算气血
@@ -5092,7 +5300,7 @@ function applyTurn(d, action, judge){
   for(const nn of (d.newNpcs||[])){ if(nn&&nn.name&&(nn.name=plain(nn.name))&&!S.npcs.find(x=>x.name===nn.name)){
     const o=normNpc(nn); o.lastSeen=S.turn;
     const b=bossOf(o.name);
-    if(b){ o['修为']=b.wu; o.faction='幽墟头目'; o.realm='幽墟'; o.identity=`幽墟头目·${b.title}`; o.alignment=o.alignment||'邪道'; if(bossDead(b)) continue; }
+    if(b){ o['修为']=bossWu(b); o.faction='幽墟头目'; o.realm='幽墟'; o.identity=`幽墟头目·${b.title}`; o.alignment=o.alignment||'邪道'; if(bossDead(b)) continue; }
     if(erosionStage()>=3&&TIE_REALMS.indexOf(jieName())>=0) o['好感度']=clamp(num(o['好感度'])-10);   // 被幽墟标记过的人，三界的人见了不自在
     S.npcs.push(o); autoFollow(o); logGot(`结识新人物【${o.name}】（${o.relation||''}）${o.follow?'，跟在你身边':''}`);
   } }
@@ -6035,7 +6243,7 @@ function renderPanel(){
   $('pFace').innerHTML=avatarFace(p,'',null,true);
   $('pName').textContent=p.name;
   $('pBiaozi').textContent=p.biaozi?('字 '+p.biaozi):'';
-  $('pMeta').textContent=`${p.gender} · ${p.age}岁／看着${lookAge(p)}／寿元${lifespanOf(p)}（${ageNote()}） · ${p.backgroundType||''} · ${p.faction||'散人'}`;
+  $('pMeta').textContent=`${p.gender} · ${p.age}岁／看着${lookAge(p)}／寿元${lifespanOf(p)}${lifeTierNote()?'（'+lifeTierNote()+'）':''}（${ageNote()}） · ${p.backgroundType||''} · ${p.faction||'散人'}`;
   const evil=(p['恶名']||0)>(p['声望']||0)&&p['恶名']>=35;
   const rk=playerRank();
   $('pTitle').innerHTML=`<span class="titlebadge ${evil?'evil':''}">${esc(titleOf(p))}</span>`

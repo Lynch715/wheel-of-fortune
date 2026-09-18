@@ -37,7 +37,12 @@ ok('提示词里有名人旧交，两个都认识的人排在前面', sb.include
 ok('认识的人资料里带着旧交', await page.evaluate(()=>{ const t=stateBlocks(); const a=t.indexOf('【眼下要紧的人】'); return t.slice(a).includes('"旧交":"猪八戒—唐僧'); }));
 ok('规则写明不许写成素不相识', sb.includes('不许写成素不相识')||(await page.evaluate(()=>lawBlock()+worldRules())).includes('不许写成素不相识'));
 ok('旧交一块不超过 40 行', await page.evaluate(()=>tiesBlock().split('\n').length<=40));
-ok('没认识名人时不塞一大段（只列在场首领之间的）', await page.evaluate(()=>{ const keep=S.npcs; S.npcs=keep.filter(n=>!['孙悟空','猪八戒'].includes(n.name)); const t=tiesBlock(); S.npcs=keep; return !t.includes('孙悟空—'); }));
+ok('没认识名人时不塞一大段（只列在场首领之间的）', await page.evaluate(()=>{
+  const keep=S.npcs, rk=S.world.ranking;
+  S.npcs=keep.filter(n=>!['孙悟空','猪八戒'].includes(n.name));
+  S.world.ranking=rk.filter(r=>!['孙悟空','猪八戒'].includes(r.name));   // v3.3：榜上那六席本来就是名人，得一并挪开
+  const t=tiesBlock(); S.npcs=keep; S.world.ranking=rk;
+  return !t.includes('孙悟空—猪八戒'); }));
 ok('人物详情里显示旧交', await page.evaluate(()=>{ showNpc(findNpc('猪八戒')); const t=$('npcMBody').textContent; $('npcMask').classList.remove('on'); return t.includes('旧交')&&t.includes('猪八戒—唐僧'); }));
 ok('提示词没胖太多（<18500）', await page.evaluate(()=>turnPrompt('试',{fate:10,days:1}).length<18500));
 

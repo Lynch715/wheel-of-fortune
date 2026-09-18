@@ -113,7 +113,7 @@ ok('v14 老档升到最新版：轮转字段删掉、幽墟里的人落在第一
 console.log('\n【提示词长度】');
 const lens=await page.evaluate(()=>{ const r=S.realm, out={}; for(const k of ['东荒','西陆','樱洲','轮枢','幽墟']){ S.realm=k; if(k==='幽墟') S.abyssLayer=3; out[k]=turnPrompt('试',{fate:10,months:1}).length; } S.realm=r; S.abyssLayer=0; return out; });
 console.log('  各界一回合提示词：'+JSON.stringify(lens));
-ok('各界都在 17000 字以内', Object.values(lens).every(v=>v<17000));
+ok('各界都在 17300 字以内（v3.3 万界榜前六席换成名人，开局就是满榜十人）', Object.values(lens).every(v=>v<17300));
 
 console.log('\n通过 '+oks.length+' 项，失败 '+fails.length+' 项');
 if(errs.length) console.log('页面报错：\n'+errs.slice(0,6).join('\n'));
