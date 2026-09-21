@@ -364,6 +364,20 @@ body{
 .inkball:nth-child(2){animation-delay:.25s}.inkball:nth-child(3){animation-delay:.5s}
 @keyframes pulse{from{opacity:.25;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
 /* ============ 弹窗 ============ */
+.crossopt.pick{border-color:var(--gold);background:rgba(184,146,58,.13)}
+.warhead{font-size:14px;margin:4px 0 7px;color:var(--ink)}
+.warrow{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:4px 0;border-bottom:1px dashed var(--paper-edge)}
+.warrow .wn{flex:0 0 52px;color:var(--ink-soft)}
+.warrow .wd{flex:1;color:var(--ink-soft)}
+.warrow .wr{flex:0 0 46px;text-align:right}
+.warrow.won .wr{color:#4a6b45}
+.warrow.lost .wr{color:var(--accent)}
+.crow{display:flex;align-items:flex-start;gap:8px;margin:7px 0}
+.crow>label{flex:0 0 42px;font-size:13px;color:var(--ink-soft);padding-top:4px}
+.crow input{flex:1;padding:4px 7px;font:inherit;font-size:14px;background:var(--paper);border:1px solid var(--paper-edge);color:var(--ink);border-radius:3px}
+.csegs{flex:1;display:flex;flex-wrap:wrap;gap:4px}
+.cseg{padding:3px 9px;font-size:12.5px;border:1px solid var(--paper-edge);border-radius:3px;cursor:pointer;color:var(--ink-soft);min-height:26px;line-height:19px}
+.cseg.on{border-color:var(--gold);color:var(--ink);background:rgba(184,146,58,.13)}
 .modal-mask{display:none;position:fixed;inset:0;background:rgba(10,7,5,.72);z-index:50;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
 .modal-mask.on{display:flex}
 .modal{
@@ -644,6 +658,7 @@ const OUTER_IMG='data:image/webp;base64,UklGRpQZAQBXRUJQVlA4WAoAAAAQAAAAewEAOQIA
     <div class="tabpane" id="tab-world">
       <div class="card" id="loreCard"><h3>❈ 万界 <small>你活在个什么地方</small><span class="lotog" id="loreTog"></span></h3><div id="loreBody" class="lore"></div></div>
       <div class="card"><h3>❈ 界门 <small>轮枢与幽墟</small></h3><div id="wGate"></div></div>
+      <div class="card" id="clanCard"><h3>❈ 本门 <small id="clanSub"></small></h3><div id="clanBody"></div></div>
       <div class="card"><h3>❈ 宿命 <small>你此生要追的事</small></h3><div id="wQuests"></div></div>
       <div class="card" id="treasureCard"><h3>❈ 珍宝录 <small id="treasureSub"></small></h3><div id="treasureList"></div></div>
       <div class="card" id="outerCard" style="display:none"><h3>☠ 轮外之物 <small id="outerSub"></small></h3><div id="outerList"></div></div>
@@ -742,6 +757,24 @@ const OUTER_IMG='data:image/webp;base64,UklGRpQZAQBXRUJQVlA4WAoAAAAQAAAAewEAOQIA
     <div id="crossList"></div>
     <div class="note" id="crossNote"></div>
     <div class="mbtnrow"><button class="mbtn" id="crossCancel">不走了</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="clanMask">
+  <div class="modal">
+    <h2>开宗立派</h2>
+    <div class="sub" id="clanFoundSub"></div>
+    <div id="clanFoundBody"></div>
+    <div class="mbtnrow"><button class="mbtn primary" id="clanFoundGo">立起来</button><button class="mbtn" id="clanFoundCancel">再想想</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="clanWarMask">
+  <div class="modal">
+    <h2>宣 战</h2>
+    <div class="sub" id="clanWarSub"></div>
+    <div id="clanWarBody"></div>
+    <div class="mbtnrow"><button class="mbtn primary" id="clanWarGo">打</button><button class="mbtn" id="clanWarCancel">不打了</button></div>
   </div>
 </div>
 
@@ -920,7 +953,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=23;
+const SAVE_VERSION=25;
 function newStateShell(){
   return {
     v:SAVE_VERSION, turn:0, date:'', player:null, npcs:[],
@@ -931,7 +964,7 @@ function newStateShell(){
     abyssSince:null, abyssRolls:0, abyssPaid:0, abyssFreed:false,
     vendettas:[], scars:[], ailments:[], engineNews:[], newsSeen:{}, treasures:{}, turnedPage:[], ledgerAt:[], ranked:false, lastChallengeMonth:-99, volumes:[], ledger:[],
     memLong:true, loreSeen:0,
-    sect:null,
+    sect:null, clan:null,
     world:{factions:[],ranking:[],events:[],fallen:[],vacant:0}, forged:[],
     ties:{'东荒-西陆':50,'东荒-樱洲':50,'西陆-樱洲':50}, voidP:20, lords:{}, lordSince:null, lordPolicy:null,
     abyssMonths:0, outerBeaten:false, outerCool:0,
@@ -1148,6 +1181,43 @@ function migrate(s){
     }catch(e){ console.warn('v23 迁移',e); }
     s.v=23;
   }
+  if(s.v<24){
+    // 门派（规范 v3.5）。老档里贡献早已到顶的，本来就是那一门的当家：直接补上门派身份，
+    // 不走「夺取」那两成折扣——不能倒扣老玩家
+    if(s.clan===undefined) s.clan=null;
+    try{
+      const _S=S; S=s;
+      if(!s.clan&&s.sect&&sectLevel(num(s.sect.contrib))>=SECT_STEPS.length-1){
+        const f=factionOf(s.sect.name);
+        if(f&&s.player){
+          s.clan={name:f.name,type:f.type||'',align:f.alignment||'中立',realm:f.realm||s.realm,base:'',desc:f.desc||'',
+            power:num(f.power),disciples:Math.max(0,Math.round(num(f.power)*0.6)),
+            quality:Math.round(Math.max(20,Math.min(70,num(f.power)*0.5))),morale:60,
+            inner:[],treasury:0,arrears:0,teachCd:-1,recruitCd:-1,drawCd:-1,
+            markFame:num(s.player['声望']),founded:num(s.months),wins:0,losses:0,lastWar:null,taken:true};
+          f.leader=s.player.name; f.mine=true;
+          s.player.faction=f.name;
+          s.sect=null;
+        }
+      }
+      S=_S;
+    }catch(e){ console.warn('v24 迁移',e); }
+    s.v=24;
+  }
+  if(s.v<25){
+    // 门派对战（规范 v3.5 第二批）：老门派补上战事那几栏
+    if(s.clan){
+      const c=s.clan;
+      if(!c.wars) c.wars={};
+      if(c.ally===undefined) c.ally='';
+      if(c.press===undefined) c.press=null;
+      if(c.pressCd===undefined) c.pressCd=null;
+      if(c.lordWarDue===undefined) c.lordWarDue=null;
+      if(c.wins==null) c.wins=0;
+      if(c.losses==null) c.losses=0;
+    }
+    s.v=25;
+  }
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
   return s;
@@ -1362,6 +1432,7 @@ function upkeepPerMonth(){
   const p=S.player; if(!p) return 0;
   let c=5+Math.floor(p.age/12);
   if(p.faction&&!/散人|^无$|^$/.test(p.faction)&&sectHere()) c=Math.round(c*0.55);   // 有势力管饭；人不在本界就管不着
+  else if(S.clan&&S.clan.realm===jieName()&&num(S.clan.treasury)>0) c=Math.round(c*0.6); // 自己的山门管饭——公中还有钱的时候
   if(isLordOf(jieName())) c=Math.round(c*0.7);                                       // 界主有人供养
   if(tideOn()) c=Math.round(c*1.2);                                                  // 起了魔潮，什么都贵
   if(p.hp<30) c+=12; else if(p.hp<60) c+=4;                              // 汤药钱
@@ -1674,6 +1745,7 @@ function advanceDays(days){
     worldTick(1);
     erosionMonth();
     treasureMonth();
+    clanTick();
   }
   if(n){ tickNpcs(n); sectTick(n); cursedTick(n); }
   S.upkeepLast=cost; S.starveMonths=starve;
@@ -1930,27 +2002,47 @@ function playerLordRealm(){
   const here=jieName();
   return TIE_REALMS.indexOf(here)>=0?here:((S&&S.homeRealm)||'东荒');
 }
-function playerFactionPower(){
-  if(!S||!S.sect) return 0;
-  if(sectLevel(num(S.sect.contrib))<SECT_STEPS.length-1) return 0;   // 贡献到顶才算掌了这个势力
-  const f=(typeof factionOf==='function')?factionOf(S.sect.name):null;
-  return f?num(f.power):0;
+/* 势力分 = 你当 leader 的那些势力 power 之和，封顶 100（规范 v2.0，公式没动）。
+   v3.5 之前玩家实际上只有师门这一条路，而三界的势力 leader 全是 T1-T3 那一档，
+   等于拿不到这五成；现在自己的门派也算一份。轮枢不设界主，那儿的门派不进账。 */
+function playerFactionPower(realm){
+  if(!S) return 0;
+  const R=realm||playerLordRealm();
+  let p=0;
+  const c=(typeof clan==='function')?clan():null;
+  if(c&&c.realm===R&&TIE_REALMS.indexOf(R)>=0) p+=num(c.power);
+  if(S.sect&&sectLevel(num(S.sect.contrib))>=SECT_STEPS.length-1){   // 贡献到顶才算掌了这个势力
+    const f=(typeof factionOf==='function')?factionOf(S.sect.name):null;
+    if(f&&(f.realm||R)===R) p+=num(f.power);
+  }
+  return Math.min(100,p);
 }
 function playerLordScore(){
   if(!S||!S.player) return 0;
   const foreign=playerLordRealm()!==S.homeRealm;
   return lordCalc(playerFactionPower(), num(S.player['声望']), attrVal(S.player,'修为'), foreign);
 }
+/* 至高那几位不当界主（v3.5 拍板）：界主是政治不是武力，太上老君、元始天尊、如来、女娲
+   不会去管一界的政事——跟 v3.4「T1–T3 不随行」、v3.5「T1–T3 不让位」是同一套口径。
+   不加这一条，三界的位子全被 95–105 分的圣人占死，玩家把门派做到顶也只有九十出头。
+   只掐 T1、不掐 T2：跑量量过，连 T2 一起掐掉，太清一脉权势 90 那一份影响力就整个从棋盘上
+   消失了，界主变成建了门派就必得（100%）。留着 T2，坐东荒的是玉皇大帝、西陆是教皇——
+   这几位本来就是管事的，比圣人合适；数也对得上：拼命一档够得着，勤快一档还差一口气。 */
+function lordAloof(name){
+  return ((typeof fameTierOf==='function')?fameTierOf(name):'')==='T1';
+}
 // 一界里够格争的人：势力当家的、榜上的、认识的，加上玩家自己
 function lordPool(R){
   const seen=new Set(), out=[];
   const push=(name,power,fame,wu,foreign,isPlayer)=>{
     if(!name||seen.has(name)) return; seen.add(name);
+    if(!isPlayer&&lordAloof(name)) return;
     out.push({name, score:lordCalc(power,fame,wu,foreign), isPlayer:!!isPlayer});
   };
-  if(playerLordRealm()===R) push(S.player.name, playerFactionPower(), num(S.player['声望']), attrVal(S.player,'修为'), R!==S.homeRealm, true);
+  if(playerLordRealm()===R) push(S.player.name, playerFactionPower(R), num(S.player['声望']), attrVal(S.player,'修为'), R!==S.homeRealm, true);
   for(const f of ((S.world&&S.world.factions)||[])){
     if(!f||f.realm!==R||!f.leader) continue;
+    if(f.leader===S.player.name) continue;        // 自己的门派已经在上面算过；别让它在别界又把主角当 NPC 推一遍
     const nn=findNpc(f.leader), rk=((S.world&&S.world.ranking)||[]).find(r=>r.name===f.leader);
     const wu=nn?num(nn['修为']):(rk?num(rk['修为']):60);
     push(f.leader, factionPowerOf(f.leader,R), npcFame({name:f.leader,'修为':wu}), wu, false);
@@ -2021,7 +2113,7 @@ function gateTick(){
     news('幽墟的门合上了');
   }
   if(!open&&gateLeft()===2&&!S.gateWarned){ S.gateWarned=true; news('风声起了：再过两个月，幽墟的门就要开'); }
-  if(monthIdx()===0) recalcLords();
+  if(monthIdx()===0){ clanNpcWarTick(); recalcLords(); lordPressTick(); }
   lordMonthly();
   if(S.realm==='幽墟'&&S.abyssDue!=null&&num(S.months)>num(S.abyssDue)&&!S.abyssSafe&&!hasT('xuxinyan')) abyssEject();
   // 三界跟轮枢常年通着，异界的人和货总会流进来一些
@@ -2499,6 +2591,8 @@ function factionOf(name){ return (S.world&&S.world.factions||[]).find(f=>f.name=
 // 主角所属势力同步（LLM 改 faction 时引擎跟着记账）
 function syncSect(){
   const p=S.player, fn=p.faction;
+  // 自己开的（或接下的）门派不是「师门」：不记贡献、不领月例，那一套由 clanTick 管
+  if(S.clan&&fn===S.clan.name){ if(S.sect) S.sect=null; return; }
   const isSect=fn&&!/散人|^无$|^$/.test(fn);
   if(!isSect){ if(S.sect){ news(`主角已不再属于${S.sect.name}`); S.sect=null; } return; }
   if(!S.sect||S.sect.name!==fn){
@@ -2545,6 +2639,725 @@ function sectTick(months){
   const after=sectRank(S.sect.contrib);
   if(before!==after) news(`主角在${S.sect.name}中升为${after}`);
 }
+
+
+/* ================= 门派（规范 v3.5 第 1—5 节）=================
+   界主分里「势力分」那五成，以前玩家实际上拿不到：三界的势力 leader 全是太上老君、梅林、
+   安倍晴明这一档，在人家门里刷满贡献就把人挤下去，说不通（v3.4 已定了 T1–T3 不随行）。
+   这一节给它两个真入口——自己开一家（1.1），或者把现成的抢过来（1.4）。
+   弟子只存三个数（人数、平均资质、人心），亲传才是有名有姓的 NPC：五十个弟子写成完整
+   NPC 会把提示词顶穿。 */
+const CLAN_INNER_CAP=5;          // 亲传上限
+const CLAN_QUAL_CAP=80;          // 教得再好，普通弟子也就这个火候
+const CLAN_FAME_NEED=35;         // 开宗立派的声望门槛
+function clan(){ return (S&&S.clan)||null; }
+function hasClan(){ return !!clan(); }
+function clanHere(){ const c=clan(); return !!c&&c.realm===jieName(); }
+// 轮枢不设界主，那儿的门派不进势力分（开山门时就说明白）
+function clanCountsForLord(){ const c=clan(); return !!c&&TIE_REALMS.indexOf(c.realm)>=0; }
+function clanRanks(){ const c=clan(); return rankSetOf((c&&(c.type||c.name))||''); }
+function clanHeadTitle(){ const r=clanRanks(); return r[r.length-1]; }
+function clanMoraleLabel(v){ v=num(v==null?(clan()&&clan().morale):v); return v<15?'离心离德':(v<30?'人心浮动':(v<50?'不算齐整':(v<70?'还算齐心':(v<88?'上下一心':'众志成城')))); }
+function clanFoundCost(){ return Math.round(800*(S&&S.difficulty==='hard'?1.4:(S&&S.difficulty==='easy'?0.7:1))); }
+function clanWuNeed(){ return Math.max(8, Math.round(powerLevel()*0.35)); }
+// 空串＝开得了；否则就是差在哪儿的那句话
+function clanFoundBlock(){
+  if(!S||!S.player) return '还没开局';
+  if(hasClan()) return '你已经有了自己的门户';
+  const here=jieName();
+  if(here==='幽墟') return '幽墟不是开宗立派的地方';
+  if(TIE_REALMS.indexOf(here)<0&&here!=='轮枢') return '这儿开不了山门';
+  const w=attrVal(S.player,'修为'), need=clanWuNeed();
+  if(w<need) return `修为 ${w}，开宗立派要 ${need}，还差 ${need-w}`;
+  const fame=num(S.player['声望']);
+  if(fame<CLAN_FAME_NEED) return `声望 ${fame}，要 ${CLAN_FAME_NEED}，还差 ${CLAN_FAME_NEED-fame}`;
+  const money=num(S.player.money), c=clanFoundCost();
+  if(money<c) return `银钱 ${money} 两，置产开办要 ${c} 两，还差 ${c-money} 两`;
+  return '';
+}
+// 叛出师门：贡献清零、同门侧目、正派中立还要掉声望。
+// 没有这一条，「拜师学艺→学成叛出」是一条零代价的最优解，正派门派会变成免费培训班。
+function clanQuitSect(){
+  if(!S||!S.sect||!S.player) return '';
+  const old=S.sect.name, lv=sectLevel(num(S.sect.contrib)), f=factionOf(old);
+  S.sect=null; S.player.faction='散人';
+  if(lv>=SECT_STEPS.length-1) return old;              // 本来就是当家的，不算叛出
+  for(const n of (S.npcs||[])) if(n&&n.alive&&n.faction===old) n['好感度']=clamp(num(n['好感度'])-30);
+  const head=(S.npcs||[]).find(n=>n&&n.alive&&n.faction===old&&/掌门|掌教|长老|师父|师傅|团长|塔主|宗家|会长|教宗|影/.test((n.identity||'')+(n.relation||'')));
+  if(head) addVendetta(head.name,`你叛出${old}，另立门户`,false,35);
+  const al=f?f.alignment:'中立';
+  if(al!=='邪道'&&!fdm().freeAct) S.player['声望']=clamp(num(S.player['声望'])-10);
+  ledger(`叛出${old}，另立门户`);
+  news(`${S.player.name}叛出${old}，要自己开一家——旧日同门无不侧目`);
+  return old;
+}
+// 门派也是一支势力：进 S.world.factions，这样格局里看得见、别家能跟它结交交恶、模型写风闻时知道有这么一家
+function clanRegister(){
+  const c=clan();
+  if(!c||!S||!S.world||!Array.isArray(S.world.factions)||!S.player) return;
+  let f=factionOf(c.name);
+  if(!f){ f={name:c.name}; S.world.factions.push(f); }
+  f.type=c.type||''; f.realm=c.realm; f.alignment=c.align||'中立';
+  f.power=Math.round(num(c.power)); f.leader=S.player.name; f.mine=true;
+  f.desc=c.desc||`${S.player.name}一手立起来的${c.type||'门户'}`;
+}
+function foundClan(o){
+  if(clanFoundBlock()) return false;
+  o=o||{};
+  const p=S.player, cost=clanFoundCost(), realm=jieName();
+  clanQuitSect();
+  p.money=Math.max(0,num(p.money)-cost);
+  S.clan={
+    name:String(o.name||'').slice(0,12)||'无名门户',
+    type:o.type||'', align:o.align||'中立', realm:realm, base:o.base||'',
+    desc:o.desc||'',
+    power:5, disciples:0, quality:0, morale:60,
+    inner:[], treasury:Math.round(cost/2), arrears:0,
+    teachCd:-1, recruitCd:-1, drawCd:-1,
+    markFame:num(p['声望']), markTier:tierOf(attrVal(p,'修为')),
+    founded:num(S.months), wins:0, losses:0, lastWar:null, taken:false,
+    wars:{}, ally:'', press:null, pressCd:null, lordWarDue:null
+  };
+  p.faction=S.clan.name;
+  clanRegister();
+  recalcLords(true);
+  ledger(`在${realm}${o.base?'·'+o.base:''}开宗立派，立了${S.clan.name}`);
+  news(`${p.name}在${o.base||realm}开了山门，立起${S.clan.name}的旗号`);
+  if(realm==='轮枢') news('轮枢没有界主——在这儿立的字号，权势再大也不入任何一界的界主之争');
+  return true;
+}
+/* ---- 夺取现有势力（规范 1.4）---- */
+function clanNpcWu(name){
+  if(!name) return 60;
+  const n=findNpc(name); if(n) return num(n['修为']);
+  const r=((S.world&&S.world.ranking)||[]).find(x=>x&&x.name===name); if(r) return num(r['修为']);
+  if(typeof fameWu==='function'){ const w=fameWu(name); if(w) return num(w); }
+  return 60;
+}
+function clanSeizeBlock(){
+  if(!S||!S.player) return '还没开局';
+  if(hasClan()) return '你已经有了自己的门户';
+  if(!S.sect) return '你没有师门，无从接手';
+  const f=factionOf(S.sect.name);
+  if(!f) return '这一门在当世格局上没有名字';
+  if(sectLevel(num(S.sect.contrib))<SECT_STEPS.length-1)
+    return `贡献还没到顶，${sectRank(num(S.sect.contrib))}接不了这一门`;
+  const ld=f.leader;
+  if(ld&&ld!==S.player.name){
+    const t=(typeof fameTierOf==='function')?fameTierOf(ld):'';
+    if(t==='T1'||t==='T2'||t==='T3') return `${ld}这样的人物，不会跟你比一场就让位`;
+    const wu=clanNpcWu(ld);
+    if(attrVal(S.player,'修为')<wu) return `${ld}修为 ${wu}，你还压不住他`;
+  }
+  return '';
+}
+/* 三阵取两胜——照「讨伐轮外之物」那套现成的节奏。
+   一·掌门阵（修为）｜二·门人阵（修为，比的是两边的班底）｜三·声势阵（谈吐，拼人心与名望） */
+function clanForceOf(c){
+  if(!c) return 0;
+  return Math.round(num(c.power)*0.5+Math.min(20,num(c.disciples)*0.3)+Math.min(20,wuNorm(clanInnerWu())/100*20));
+}
+function clanInnerWu(){
+  const c=clan(); if(!c||!c.inner.length) return 0;
+  const ws=c.inner.map(nm=>{ const n=findNpc(nm); return (n&&n.alive)?num(n['修为']):0; }).filter(x=>x>0);
+  return ws.length?Math.round(ws.reduce((a,b)=>a+b,0)/ws.length):0;
+}
+function clanFight3(foe, mine, champ){
+  const r=[];
+  const myWu=champ?num(champ['修为']):num(mine.wu);
+  r.push(rollCheck('修为', clamp(50+(num(foe.wu)-myWu)*0.8,20,95)));
+  r.push(rollCheck('修为', clamp(50+(num(foe.force)-num(mine.force))*0.8,20,95)));
+  r.push(rollCheck('谈吐', clamp(50+(num(foe.power)-num(mine.power))*0.5-num(mine.fame)*0.2,20,95)));
+  const wins=r.filter(x=>x.success).length;
+  return {win:wins>=2, wins:wins, rolls:r};
+}
+function clanSeize(){
+  const why=clanSeizeBlock(); if(why){ if(typeof toast==='function') toast(why); return null; }
+  const p=S.player, f=factionOf(S.sect.name), ld=f.leader&&f.leader!==p.name?f.leader:'';
+  const foe={wu:ld?clanNpcWu(ld):Math.round(num(f.power)*0.8), force:Math.round(num(f.power)*0.7), power:num(f.power)};
+  const mine={wu:attrVal(p,'修为'), force:sectLevel(num(S.sect.contrib))*8+followers().length*6, power:0, fame:num(p['声望'])};
+  const res=clanFight3(foe,mine);
+  if(!res.win){
+    S.sect.contrib=Math.max(0,Math.round(num(S.sect.contrib)*0.6));
+    for(const n of (S.npcs||[])) if(n&&n.alive&&n.faction===f.name) n['好感度']=clamp(num(n['好感度'])-10);
+    sufferInjury(0.5,`争${f.name}的位子，没争下来`,false);
+    ledger(`想接${f.name}这一门，没接下来`);
+    news(`${p.name}想接${f.name}，三阵只胜了${res.wins}阵，门中长辈不服`);
+    return res;
+  }
+  const p0=num(f.power);
+  S.clan={
+    name:f.name, type:f.type||'', align:f.alignment||'中立', realm:f.realm||jieName(), base:'',
+    desc:f.desc||'',
+    power:Math.round(p0*0.8),                                    // 人心浮动，当场掉两成
+    disciples:Math.max(0,Math.round(p0*0.6*0.85)),               // 弟子出走一成半
+    quality:Math.round(clamp(p0*0.5,20,70)), morale:55,
+    inner:[], treasury:0, arrears:0, teachCd:-1, recruitCd:-1, drawCd:-1,
+    markFame:num(p['声望']), markTier:tierOf(attrVal(p,'修为')), founded:num(S.months), wins:0, losses:0, lastWar:null, taken:true,
+    wars:{}, ally:'', press:null, pressCd:null, lordWarDue:null
+  };
+  // 门里认识的人，够格的顺势成了亲传
+  for(const n of (S.npcs||[])){
+    if(!n||!n.alive||n.faction!==f.name||n.name===ld) continue;
+    if(S.clan.inner.length>=CLAN_INNER_CAP) break;
+    if(num(n['好感度'])>=60) S.clan.inner.push(n.name);
+  }
+  S.sect=null; p.faction=f.name;
+  if(ld){
+    const old=findNpc(ld);
+    if(old&&old.alive){ old['好感度']=clamp(num(old['好感度'])-60); addVendetta(ld,`你把${f.name}从他手里接了过去`,false,55); }
+  }
+  clanRegister(); recalcLords(true);
+  ledger(`接下了${f.name}，从此这一门是你的`);
+  news(`${p.name}三阵胜了${res.wins}阵，${ld?ld+'让出了':'接下了'}${f.name}的位子——只是门里人心一时还没定`);
+  return res;
+}
+/* ---- 招弟子（规范 3.1）---- */
+function clanRecruitDC(){
+  const c=clan(); if(!c) return 99;
+  let dc=55-num(c.power)*0.3-num(S.player['声望'])*0.2+num(c.disciples)*0.3;
+  if(tideOn()) dc+=(c.align==='邪道'?5:-8);        // 乱世里正派好招人，邪道反过来
+  else if(c.align==='邪道') dc-=3;
+  if(atWar(c.realm)) dc+=5;
+  if(num(c.losses)>num(c.wins)) dc+=5;
+  return Math.round(clamp(dc,15,92));
+}
+function clanAddDisciples(n,q){
+  const c=clan(); if(!c||n<=0) return;
+  const tot=num(c.disciples)+n;
+  c.quality=Math.round((num(c.quality)*num(c.disciples)+num(q)*n)/tot);
+  c.disciples=tot;
+}
+// 山门住得下多少人：跟着权势走。没有这个头，弟子会一路爬到三百，而权势那一项五十人就封顶了
+function clanCap(){ const c=clan(); return c?Math.round(40+num(c.power)):0; }
+function clanRecruitBlock(){
+  const c=clan(); if(!c) return '你还没有门户';
+  if(c.recruitCd===num(S.months)) return '这个月已经开过一次山门了';
+  if(num(c.disciples)>=clanCap()) return `山门住不下了（${num(c.disciples)}/${clanCap()}）——先把权势做上去`;
+  return '';
+}
+function clanRecruit(){
+  const c=clan(); if(!c) return null;
+  const why=clanRecruitBlock();
+  if(why){ if(typeof toast==='function') toast(why); return null; }
+  c.recruitCd=num(S.months);
+  const r=rollCheck('谈吐', clanRecruitDC());
+  if(!r.success){
+    news(`${c.name}开了山门，来的没几个，看过就走了`);
+    return {r:r,n:0};
+  }
+  const big=r.crit==='大成功';
+  let n=big?rnd(5,9):rnd(2,5); n=Math.max(1,Math.min(n, clanCap()-num(c.disciples)));
+  const q=big?rnd(40,80):rnd(20,60);
+  clanAddDisciples(n,q);
+  clanMorale(1);
+  ledger(`${c.name}收了${n}个弟子`);
+  news(big?`${c.name}这回开山门来了不少人，里头有几个是好苗子`:`${c.name}收了${n}个新弟子`);
+  return {r:r,n:n,q:q};
+}
+/* ---- 授业（规范 3.4）----
+   招到一批庸才不该锁死这一局的上限；也给「学识」这一项找了个真进玩法的用处 */
+function clanTeachDC(){
+  const c=clan(); if(!c) return 99;
+  return Math.round(clamp(50+num(c.disciples)*0.2-c.inner.length*3,15,92));
+}
+function clanTeachBlock(){
+  const c=clan(); if(!c) return '你还没有门户';
+  if(!num(c.disciples)) return '门下一个人都没有，教谁';
+  if(c.teachCd===num(S.months)) return '这个月已经讲过一轮了';
+  if(num(c.quality)>=CLAN_QUAL_CAP) return `门下弟子的火候已经到头了（${CLAN_QUAL_CAP}），再讲也上不去`;
+  return '';
+}
+function clanTeach(){
+  const c=clan(); if(!c) return null;
+  const why=clanTeachBlock(); if(why){ if(typeof toast==='function') toast(why); return null; }
+  c.teachCd=num(S.months);
+  const r=rollCheck('学识', clanTeachDC());
+  let d=0,m=1;
+  if(r.crit==='大成功'){ d=4; m=5; } else if(r.success){ d=2; m=3; }
+  if(d) c.quality=Math.min(CLAN_QUAL_CAP, num(c.quality)+d);
+  clanMorale(m);
+  news(d?`${c.name}开了一堂课，底下的人这回是真听进去了`:`${c.name}照例讲了一课，听懂的没几个`);
+  return {r:r,d:d};
+}
+/* ---- 拔擢亲传（规范 3.3）---- */
+function clanPromoteBlock(){
+  const c=clan(); if(!c) return '你还没有门户';
+  if(c.inner.length>=CLAN_INNER_CAP) return `亲传已经有 ${CLAN_INNER_CAP} 个，再多就顾不过来了`;
+  if(num(c.disciples)<5) return '门下不到五个人，拔谁';
+  return '';
+}
+function clanPromote(){
+  const c=clan(); if(!c) return null;
+  const why=clanPromoteBlock(); if(why){ if(typeof toast==='function') toast(why); return null; }
+  const r=rollCheck('学识', 45);
+  if(!r.success){ news(`${c.name}想从门下拔个亲传，挑来挑去没挑出合意的`); return {r:r,name:''}; }
+  const female=Math.random()<0.45;
+  // 名字要跟名录里现有的人岔开——重名会让 findNpc 摸到另一个人（可能还是个死人）
+  let nm=(nameCandidates(c.realm,8).find(x=>x&&!findNpc(x)))||'';
+  if(!nm) for(let i=0;i<40&&!nm;i++){ const x=makeName(c.realm,i%2===1); if(x&&!findNpc(x)&&x!==S.player.name) nm=x; }
+  if(!nm) nm=makeName(c.realm,female);
+  const wu=clampW(Math.max(5,Math.round(num(c.quality)*0.6+rnd(-4,8))));
+  const n=normNpc({name:nm, gender:female?'女':'男', age:rnd(15,32),
+    relation:'亲传弟子', identity:`${c.name}${clanRanks()[2]}`,
+    '好感度':70, '修为':wu, faction:c.name, realm:c.realm, alignment:c.align||'中立',
+    desc:`你从门下拔上来的人`});
+  S.npcs.push(n);
+  c.inner.push(nm);
+  c.disciples=Math.max(0,num(c.disciples)-1);
+  clanMorale(3);
+  if(typeof autoFollow==='function') autoFollow(n);
+  ledger(`拔${nm}为${c.name}亲传`);
+  news(`${c.name}拔了${nm}做亲传`);
+  return {r:r,name:nm};
+}
+/* ---- 延请名宿（规范 3.2）---- */
+function clanInviteFee(){ return Math.round(400*(S&&S.difficulty==='hard'?1.4:(S&&S.difficulty==='easy'?0.7:1))); }
+function clanInviteBlock(n){
+  const c=clan(); if(!c) return '你还没有门户';
+  if(!n||!n.alive) return '人都不在了';
+  if(c.inner.indexOf(n.name)>=0) return `${n.name}已经在门里了`;
+  if(c.inner.length>=CLAN_INNER_CAP) return `亲传已经有 ${CLAN_INNER_CAP} 个，再多就顾不过来了`;
+  if(num(n['好感度'])<65) return `${n.name}对你好感 ${num(n['好感度'])}，请人入伙要 65`;
+  const t=(typeof fameTierOf==='function')?fameTierOf(n.name):'';
+  if(t==='T1'||t==='T2'||t==='T3') return `${n.name}这样的人物，不会来给你当长老`;
+  if(typeof followSeat==='function'){ const s=followSeat(n); if(s&&/走不开/.test(s)) return s; }
+  if(n.realm&&n.realm!==c.realm&&!n.follow) return `${n.name}远在${n.realm}，得先见上面`;
+  if(num(S.player.money)<clanInviteFee()) return `请人入伙要备下 ${clanInviteFee()} 两，你还不够`;
+  return '';
+}
+function clanInvite(n){
+  const c=clan(); if(!c||!n) return null;
+  const why=clanInviteBlock(n); if(why){ if(typeof toast==='function') toast(why); return null; }
+  S.player.money=Math.max(0,num(S.player.money)-clanInviteFee());
+  const r=rollCheck('谈吐', clamp(60-(num(n['好感度'])-65),20,92));
+  if(!r.success){ n['好感度']=clamp(num(n['好感度'])-3); news(`${n.name}谢过了${c.name}的礼，没应下来`); return {r:r,ok:false}; }
+  c.inner.push(n.name);
+  n.faction=c.name; n.relation=n.relation||'门中长老';
+  n.identity=`${c.name}${clanRanks()[4]}`;
+  clanMorale(5);
+  ledger(`请${n.name}入${c.name}，做了长老`);
+  news(`${n.name}应了${c.name}的礼，进门做长老`);
+  return {r:r,ok:true};
+}
+/* ---- 每月结算（规范 4）----
+   开销是这套东西的刹车：power 高了才养得起人，扩得太快必然亏空。 */
+function clanUpkeep(){
+  const c=clan(); if(!c) return 0;
+  const m=(S.difficulty==='hard'?1.5:(S.difficulty==='easy'?0.6:1));
+  // 跟在你身边的亲传由你自己那份开销管（v3.4 一人三成），山门里的才吃公中
+  const atHome=c.inner.filter(nm=>{ const n=findNpc(nm); return n&&n.alive&&!n.follow; }).length;
+  // 火候越高的弟子，吃穿用度的胃口也越大——不然一门好徒弟反倒是净赚，门派会变成钱庄
+  return Math.max(0,Math.round(num(c.disciples)*2*(0.7+num(c.quality)/100)*m+atHome*8));
+}
+function clanIncome(){
+  const c=clan(); if(!c) return 0;
+  return Math.max(0,Math.round(num(c.disciples)*1.2*(num(c.quality)/50)+num(c.power)*3));
+}
+function clanMorale(d){
+  const c=clan(); if(!c) return;
+  c.morale=Math.max(0,Math.min(100,num(c.morale)+num(d)));
+}
+function clanFund(v){
+  const c=clan(); if(!c||!S.player) return false;
+  v=Math.max(0,Math.round(num(v)));
+  if(v<=0||num(S.player.money)<v) return false;
+  S.player.money-=v; c.treasury=num(c.treasury)+v;
+  ledger(`从私房拿了${v}两贴进${c.name}的公中`);
+  return true;
+}
+// 支取要掉人心：门中人看在眼里。不掉的话「门派缺钱」就不是压力了
+function clanDrawCap(){ const c=clan(); return c?Math.floor(num(c.treasury)*0.3):0; }
+function clanDraw(v){
+  const c=clan(); if(!c||!S.player) return false;
+  if(c.drawCd===num(S.months)) return false;
+  v=Math.max(0,Math.round(num(v)));
+  if(v<=0||v>clanDrawCap()) return false;        // 一次至多支走公中的三成——不然这就是个取款机
+  c.treasury-=v; S.player.money=num(S.player.money)+v;
+  c.drawCd=num(S.months);
+  clanMorale(-5);
+  ledger(`从${c.name}的公中支了${v}两`);
+  return true;
+}
+function clanDisband(why){
+  const c=clan(); if(!c) return;
+  const nm=c.name;
+  const fs=(S.world&&S.world.factions)||[];
+  const i=fs.findIndex(f=>f&&f.name===nm&&f.mine);
+  if(i>=0) fs.splice(i,1);
+  for(const n of (S.npcs||[])) if(n&&n.faction===nm) n.faction='散人';
+  S.clan=null;
+  if(S.player){ if(S.player.faction===nm) S.player.faction='散人'; S.player['声望']=clamp(num(S.player['声望'])-10); }
+  ledger(`${nm}散了——${why}`);
+  news(`${nm}的旗子摘了下来。${why}`);
+  recalcLords(true);
+}
+function clanTick(){
+  const c=clan(); if(!c||!S||!S.player) return;
+  c.inner=c.inner.filter(nm=>{ const n=findNpc(nm); return !!(n&&n.alive); });
+  if(S.player.faction!==c.name) S.player.faction=c.name;      // 门派的归属归引擎，模型改不动
+  const out=clanUpkeep(), inc=clanIncome();
+  c.treasury=num(c.treasury)+inc;
+  if(c.treasury>=out){ c.treasury-=out; c.arrears=0; }
+  else{
+    c.treasury=0; c.arrears=num(c.arrears)+1;
+    clanMorale(-15);
+    const lost=Math.round(num(c.disciples)*(0.10+Math.random()*0.15));
+    if(lost>0){ c.disciples=Math.max(0,num(c.disciples)-lost); news(`${c.name}发不出月钱，走了${lost}个人`); }
+    ledger(`${c.name}公中空了，欠了${c.arrears}个月的用度`);
+  }
+  if(c.press&&num(S.months)-num(c.press.at)>=CLAN_PRESS_WAIT){ news(`${c.press.from}派来的人等不住，走了`); answerPress('拒'); if(!hasClan()) return; }
+  clanMorale(clanHere()?(num(c.arrears)?0:1):-2);              // 掌门长年不在，人心自然散；欠着饷就谈不上太平无事
+  const fame=num(S.player['声望']);
+  if(fame-num(c.markFame)>=10){ c.markFame=fame; clanMorale(5); }
+  const tier=tierOf(attrVal(S.player,'修为'));
+  if(c.markTier==null) c.markTier=tier;
+  else if(c.markTier!==tier){ c.markTier=tier; clanMorale(5); }   // 掌门破了境，门里也提气
+  if(num(c.morale)<30){
+    const lost=Math.round(num(c.disciples)*0.05);
+    if(lost>0){ c.disciples=Math.max(0,num(c.disciples)-lost); news(`${c.name}人心不齐，又散了${lost}个`); }
+  }
+  if(num(c.morale)<=0){ clanDisband('人心散尽，再没人肯留下'); return; }
+  // power 往目标挪一点，不跳变——它直接进界主分，一次招九个人就当场涨七分的话，界主会一年换三回
+  const t=clanPowerTarget();
+  const dir=t>num(c.power)?1:(t<num(c.power)?-1:0);
+  c.power=clamp(num(c.power)+((num(c.morale)<30&&dir>0)?0:dir),0,100);
+  clanRegister();
+}
+function clanPowerTarget(){
+  const c=clan(); if(!c||!S.player) return 0;
+  const base=Math.min(40,num(c.disciples)*0.8);
+  const inner=Math.min(15, wuNorm(clanInnerWu())/100*15);
+  const head=Math.min(20, wuNorm(attrVal(S.player,'修为'))*0.20);
+  const fame=Math.min(15, num(S.player['声望'])/100*15);
+  const rec=Math.max(-15,Math.min(10, num(c.wins)*3-num(c.losses)*4));
+  return Math.round(clamp(base+inner+head+fame+rec,0,100));
+}
+/* ---- 进提示词（规范 5.2）：放【当前时间】之后的动态段，静态前缀一字不动 ---- */
+function clanPromptBlock(){
+  const c=clan(); if(!c||!S||!S.player) return '';
+  const inner=c.inner.map(nm=>{ const n=findNpc(nm); return n?`${n.name}（修为${num(n['修为'])}${n.follow?'，跟在你身边':''}）`:null; }).filter(Boolean).join('、');
+  let t=`【本门】${c.name}（${c.type||'门户'}·${c.align||'中立'}·${c.realm}${c.base?'·'+c.base:''}）：`
+    +`权势${Math.round(num(c.power))}，弟子${num(c.disciples)}人（火候${num(c.quality)}），`
+    +`人心${Math.round(num(c.morale))}（${clanMoraleLabel()}），公中${num(c.treasury)}两${num(c.arrears)?`，已欠${num(c.arrears)}个月的用度`:''}。`;
+  if(inner) t+=`\n亲传：${inner}。`;
+  if(c.ally) t+=`\n与${c.ally}有盟约。`;
+  const wf=Object.keys(c.wars||{}).filter(k=>num(S.months)-num(c.wars[k])<CLAN_WAR_COOL);
+  if(wf.length) t+=`\n近一年动过手的：${wf.join('、')}。`;
+  if(c.press) t+=`\n${c.press.from}派来的人还等在山门外：${c.press.text}——主角还没回话，门里为这件事正吵着。`;
+  if(c.lordWarDue!=null) t+=`\n${(S.lords&&S.lords[c.realm]&&S.lords[c.realm].name)||'界主'}放了话要来收拾本门，门里正在备战。`;
+  t+=`\n你是这一门的${clanHeadTitle()}，门中人称你「${clanHeadTitle()}」。${clanHere()?'':`你眼下不在${c.realm}，门里的事只能靠书信。`}`;
+  t+='\n这几个数是引擎记的账。弟子人数、人心、公中，写门中景象时要跟它对上：人心低就写得出怨言，公中空就写得出讨薪。除了亲传那几位，不要给普通弟子起名字、编来历。';
+  return t;
+}
+function clanLine(){ const t=clanPromptBlock(); return t?'\n'+t:''; }
+
+/* ================= 门派对战（规范 v3.5 第 6 节）=================
+   power 有了长的路子（招弟子、授业），还得有转移的路子，不然「权势」只是个计时器。
+   三阵取两胜，照「讨伐轮外之物」那套现成的节奏：掌门阵、门人阵、声势阵。 */
+const CLAN_WAR_COOL=12;      // 对同一家，十二个月内不能再打
+const CLAN_WAR_REST=6;       // 任何一场之后，本门六个月不宣战
+const CLAN_PRESS_WAIT=3;     // 界主的话搁三个月不回，当回绝
+// 有位子的人不跟你这一门较真——跟 v3.4「T1–T3 不随行」、v3.5「T1–T3 不让位」同一口径
+function clanAloofFoe(name){
+  const t=(typeof fameTierOf==='function')?fameTierOf(name):'';
+  return t==='T1'||t==='T2'||t==='T3';
+}
+function clanWarBlock(f){
+  const c=clan(); if(!c||!S||!S.player) return '你还没有门户';
+  if(!f) return '没有这一家';
+  if(f.mine||f.name===c.name) return '总不能打自己';
+  if((f.realm||c.realm)!==c.realm) return `${f.name}不在${c.realm}`;
+  if(!clanHere()) return `你不在${c.realm}，隔着界发不了兵`;
+  if(c.ally&&f.name===c.ally) return `${f.name}跟本门有盟约`;
+  if(num(c.morale)<25) return '人心都要散了，这时候动手是找死';
+  if(f.leader&&f.leader!==S.player.name&&clanAloofFoe(f.leader))
+    return `${f.leader}这样的人物，不会跟你这一门较真`;
+  if(c.lastWar!=null){
+    const k=CLAN_WAR_REST-(num(S.months)-num(c.lastWar));
+    if(k>0) return `上一仗才过去${num(S.months)-num(c.lastWar)}个月，门里还没缓过来（还要 ${k} 个月）`;
+  }
+  const last=(c.wars||{})[f.name];
+  if(last!=null){
+    const k=CLAN_WAR_COOL-(num(S.months)-num(last));
+    if(k>0) return `跟${f.name}那一仗才过去${num(S.months)-num(last)}个月（还要 ${k} 个月）`;
+  }
+  return '';
+}
+function clanWarTargets(){
+  const c=clan(); if(!c) return [];
+  return ((S.world&&S.world.factions)||[])
+    .filter(f=>f&&!f.mine&&f.name!==c.name&&(f.realm||c.realm)===c.realm)
+    .map(f=>({f:f, why:clanWarBlock(f)}))
+    .sort((a,b)=>(a.why?1:0)-(b.why?1:0)||num(b.f.power)-num(a.f.power));
+}
+// 对方这一家折成三个数：当家的修为、门战力、权势
+function clanFoeOf(f){
+  const ld=(f.leader&&f.leader!==S.player.name)?f.leader:'';
+  return {name:f.name, leader:ld,
+          wu: ld?clanNpcWu(ld):Math.round(num(f.power)*0.8),
+          force: Math.round(num(f.power)*0.7),
+          power: num(f.power)};
+}
+function clanMineSide(){
+  const c=clan();
+  return {wu:attrVal(S.player,'修为'), force:clanForceOf(c), power:num(c.power), fame:num(S.player['声望'])};
+}
+// 能替你上掌门阵的人：活着的亲传
+function clanChamps(){
+  const c=clan(); if(!c) return [];
+  return c.inner.map(nm=>findNpc(nm)).filter(n=>n&&n.alive);
+}
+function clanWar(fname, champName){
+  const c=clan(); if(!c) return null;
+  const f=factionOf(fname);
+  const why=clanWarBlock(f);
+  if(why){ if(typeof toast==='function') toast(why); return null; }
+  let champ=null;
+  if(champName){
+    champ=findNpc(champName);
+    if(!champ||!champ.alive||c.inner.indexOf(champName)<0){ if(typeof toast==='function') toast('这个人上不了阵'); return null; }
+  }
+  const res=clanFight3(clanFoeOf(f), clanMineSide(), champ);
+  res.foe=fname; res.champ=champName||'';
+  c.wars=c.wars||{}; c.wars[fname]=num(S.months); c.lastWar=num(S.months);
+  if(res.win) clanWarWin(f,res,champ); else clanWarLose(f,res,champ);
+  recalcLords(true);
+  return res;
+}
+/* 赢：吞一半。对方权势砍半，砍掉的那一半里六成并进本门（仍封顶 100）。
+   封顶意味着吞到头就到头了——势力分最多给你五十分，剩下五十分还得靠声望和修为。 */
+function clanWarWin(f,res,champ){
+  const c=clan(), p=S.player, p0=num(f.power);
+  const half=p0*0.5;
+  f.power=clamp(Math.round(p0-half),0,100);
+  const gain=Math.round(half*0.6);
+  c.power=clamp(num(c.power)+gain,0,100);
+  const room=Math.max(0,clanCap()-num(c.disciples));
+  const took=Math.min(room, Math.round(p0*0.6*0.30));
+  if(took>0) clanAddDisciples(took, Math.round(clamp(p0*0.5,20,70)));
+  c.wins=num(c.wins)+1;
+  clanMorale(10);
+  // 欺负人不算本事：正派打正派，或者打一个权势比自己低三十以上的
+  const bully=(c.align==='正派'&&f.alignment==='正派')||(p0<num(c.power)-30);
+  if(bully){ p['恶名']=clamp(num(p['恶名'])+5); p['声望']=clamp(num(p['声望'])+3); }
+  else p['声望']=clamp(num(p['声望'])+8);
+  if(f.leader&&f.leader!==p.name){
+    const n=findNpc(f.leader);
+    if(n&&n.alive) n['好感度']=clamp(num(n['好感度'])-50);
+    addVendetta(f.leader, `你带人打上${f.name}的门`, false, 45);
+  }
+  ledger(`${c.name}打赢${f.name}，吞了${gain}分权势${took?`、收了${took}个人`:''}`);
+  news(`${c.name}打上${f.name}的门，三阵胜了${res.wins}阵——${f.name}元气大伤，人也走了一批`);
+  if(bully) news(`这一仗打得不好看：${f.name}本就不如本门，${c.realm}这边有人说闲话`);
+  if(num(f.power)<10) clanFactionFell(f);
+}
+function clanFactionFell(f){
+  const fs=(S.world&&S.world.factions)||[];
+  const i=fs.indexOf(f); if(i>=0) fs.splice(i,1);
+  for(const n of (S.npcs||[])) if(n&&n.faction===f.name) n.faction='散人';
+  if(S.sect&&S.sect.name===f.name) S.sect=null;
+  const c=clan(); if(c&&c.ally===f.name) c.ally='';
+  ledger(`${f.name}散了`);
+  news(`${f.name}的旗子倒了，剩下的人各奔东西`);
+}
+function clanWarLose(f,res,champ){
+  const c=clan(), p=S.player;
+  c.power=clamp(Math.floor(num(c.power)*0.8),0,100);
+  const lost=Math.round(num(c.disciples)*0.2);
+  if(lost>0) c.disciples=Math.max(0,num(c.disciples)-lost);
+  c.losses=num(c.losses)+1;
+  clanMorale(-20);
+  // 掌门阵输了，伤在上阵那个人身上——派亲传去，风险就转到他身上
+  if(res.rolls[0]&&!res.rolls[0].success){
+    if(champ){
+      champ['修为']=clampW(num(champ['修为'])-rnd(3,10));
+      if(Math.random()<0.25){
+        champ.alive=false;
+        c.inner=c.inner.filter(x=>x!==champ.name);
+        ledger(`${champ.name}死在${f.name}门前那一阵`);
+        news(`${champ.name}替你上的那一阵，没能回来`);
+      }else news(`${champ.name}替你上的那一阵，伤得不轻`);
+    }else{
+      p.hp=Math.max(1,num(p.hp)-rnd(15,30));
+      sufferInjury(0.55, `打${f.name}那一仗，败了`, false);
+    }
+  }
+  ledger(`${c.name}打${f.name}，败了`);
+  news(`${c.name}打上${f.name}的门，三阵只胜了${res.wins}阵，人退了回来${lost?`，走了${lost}个弟子`:''}`);
+  if(num(c.power)<=0) clanDisband(`${f.name}那一仗把门底子打没了`);
+}
+
+/* ---- NPC 势力之间也要打（规范 6.6）----
+   不然全界只有玩家在动，界主榜是死的。每年正月掷一次。 */
+function clanNpcWarTick(){
+  if(!S||!S.world||!S.player) return;
+  const R=jieName(); if(TIE_REALMS.indexOf(R)<0) return;
+  const fs=((S.world.factions)||[]).filter(f=>f&&(f.realm||R)===R&&!f.mine&&f.leader&&!clanAloofFoe(f.leader));
+  if(fs.length<2) return;
+  const pairs=[];
+  for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){
+    const a=fs[i], b=fs[j];
+    if(Math.abs(num(a.power)-num(b.power))>=20) continue;
+    if(a.alignment===b.alignment&&a.alignment!=='邪道') continue;   // 正邪相攻，或者邪道自己内讧
+    pairs.push([a,b]);
+  }
+  if(!pairs.length||Math.random()>=0.10) return;
+  const pr=pick(pairs);
+  const w=Math.random()<0.5?pr[0]:pr[1], l=(w===pr[0]?pr[1]:pr[0]);
+  const take=Math.max(1,Math.round(num(l.power)*0.2));
+  l.power=clamp(num(l.power)-take,0,100);
+  w.power=clamp(num(w.power)+Math.round(take*0.6),0,100);
+  ledger(`${w.name}压了${l.name}一头`);
+  news(`${R}这边${w.name}与${l.name}起了争端，${l.name}折了些元气`);
+  if(num(l.power)<10) clanFactionFell(l);
+}
+
+/* ---- 在位界主来收拾你（规范 6.7）----
+   没有这一条，界主只是一个你慢慢爬过去的分数，那位子上的人从头到尾不吭声。 */
+function lordFactionOf(name,R){
+  let best=null;
+  for(const f of ((S.world&&S.world.factions)||[]))
+    if(f&&(f.realm||R)===R&&f.leader===name&&(!best||num(f.power)>num(best.power))) best=f;
+  return best;
+}
+function clanRankIn(R){
+  const pool=lordPool(R).sort((a,b)=>b.score-a.score);
+  for(let i=0;i<pool.length;i++) if(pool[i].isPlayer) return i+1;
+  return 99;
+}
+function lordPressTick(){
+  const c=clan(); if(!c||!S||!S.player) return;
+  if(!clanCountsForLord()) return;               // 轮枢不设界主，没人来找你
+  const R=c.realm;
+  if(isLordOf(R)) return;
+  const l=(S.lords||{})[R]; if(!l||l.rumor) return;
+  if(c.lordWarDue!=null&&num(S.months)>=num(c.lordWarDue)){ c.lordWarDue=null; lordAttack(R,l); return; }
+  if(c.press) return;                            // 上一桩还没回话
+  const rank=clanRankIn(R);
+  if(rank!==2&&rank!==3) return;
+  if(c.pressCd!=null&&num(S.months)-num(c.pressCd)<12) return;
+  if(Math.random()>=(rank===2?0.35:0.20)) return;
+  c.pressCd=num(S.months);
+  /* 他怎么待你，看交情，也看正邪同不同路：
+     好感 ≥40，或者同路且好感 ≥25 → 拉拢；好感 <20 且他不是名人 → 直接发兵；其余 → 施压 */
+  const n=findNpc(l.name), fav=n?num(n['好感度']):30;
+  const same=c.align===(lordFactionOf(l.name,R)||{}).alignment;
+  if(fav>=40||(same&&fav>=25)) clanPressOffer(l,'拉');
+  else if(fav<20&&!clanAloofFoe(l.name)) lordAttack(R,l);
+  else clanPressOffer(l,'压');
+}
+function clanPressOffer(l,kind){
+  const c=clan(); if(!c) return;
+  const money=Math.max(1,Math.round(num(c.treasury)*0.3));
+  const champ=clanChamps().sort((a,b)=>num(b['修为'])-num(a['修为']))[0];
+  c.press={kind:kind, from:l.name, at:num(S.months), money:money, champ:champ?champ.name:'',
+    text: kind==='拉'
+      ? `许本门一个长老位，要结盟`
+      : `要本门投效、或交一个亲传、或交公中的三成（${money}两）`};
+  if(kind==='拉'){
+    ledger(`${l.name}派人来说合，要跟本门结盟`);
+    news(`${c.realm}界主${l.name}派人到了${c.name}——话说得客气，是来说合的`);
+  }else{
+    ledger(`${l.name}派人来施压`);
+    news(`${c.realm}界主${l.name}派人到了${c.name}——话说得不客气`);
+  }
+}
+function lordAttack(R,l){
+  const c=clan(); if(!c) return null;
+  const f=lordFactionOf(l.name,R);
+  const pw0=f?num(f.power):80;
+  const foe={name:f?f.name:l.name, leader:l.name, wu:clanNpcWu(l.name), force:Math.round(pw0*0.8), power:pw0};
+  const res=clanFight3(foe, clanMineSide());
+  c.lastWar=num(S.months);
+  ledger(`${R}界主${l.name}发兵来攻`);
+  news(`${l.name}带着人马打上了${c.name}的门`);
+  if(res.win){
+    c.wins=num(c.wins)+1; clanMorale(15);
+    S.player['声望']=clamp(num(S.player['声望'])+10);
+    if(f){ const take=Math.round(num(f.power)*0.2); f.power=clamp(num(f.power)-take,0,100); c.power=clamp(num(c.power)+Math.round(take*0.6),0,100); }
+    ledger(`挡住了界主的人马`);
+    news(`${c.name}竟把界主的人挡了回去——这一界的人这些日子都在说这件事`);
+  }else{
+    c.power=clamp(Math.floor(num(c.power)*0.7),0,100);
+    const lost=Math.round(num(c.disciples)*0.25);
+    if(lost>0) c.disciples=Math.max(0,num(c.disciples)-lost);
+    c.losses=num(c.losses)+1; clanMorale(-25);
+    S.player.hp=Math.max(1,num(S.player.hp)-rnd(15,30));
+    sufferInjury(0.5, `界主${l.name}打上门来`, false);
+    ledger(`界主打上门，没挡住`);
+    news(`${c.name}没挡住——山门被踏，弟子散了一批`);
+    if(num(c.power)<=0) clanDisband(`界主${l.name}那一仗把门踏平了`);
+  }
+  recalcLords(true);
+  return res;
+}
+// choice：拉拢 应/拒；施压 投/人/钱/拒
+function answerPress(choice){
+  const c=clan(); const pr=c&&c.press; if(!pr) return null;
+  const R=c.realm, l=(S.lords||{})[R];
+  const n=findNpc(pr.from);
+  c.press=null;
+  if(pr.kind==='拉'){
+    if(choice==='应'){
+      c.ally=pr.from;
+      c.power=clamp(num(c.power)+5,0,100); clanMorale(10);
+      if(n) n['好感度']=clamp(num(n['好感度'])+15);
+      ledger(`与${pr.from}结了盟`);
+      news(`${c.name}与${pr.from}结了盟。盟友归盟友——他那一份权势，不算在你头上`);
+    }else{
+      if(n) n['好感度']=clamp(num(n['好感度'])-20);
+      ledger(`回绝了${pr.from}的盟约`);
+      news(`${c.name}回绝了界主的说合`);
+    }
+    return choice;
+  }
+  if(choice==='投'){
+    const f=lordFactionOf(pr.from,R), nm=c.name;
+    if(f) f.power=clamp(num(f.power)+Math.round(num(c.power)*0.6),0,100);
+    const fs=(S.world&&S.world.factions)||[];
+    const i=fs.findIndex(x=>x&&x.name===nm&&x.mine); if(i>=0) fs.splice(i,1);
+    for(const x of (S.npcs||[])) if(x&&x.faction===nm) x.faction=f?f.name:'散人';
+    S.clan=null;
+    S.player.faction=f?f.name:'散人';
+    S.sect=f?{name:f.name, contrib:SECT_STEPS[SECT_STEPS.length-2], joined:S.turn}:null;
+    if(n) n['好感度']=clamp(num(n['好感度'])+15);
+    ledger(`${nm}并入${f?f.name:pr.from}，你降做长老`);
+    news(`${nm}的旗子收了起来，并进了${f?f.name:pr.from}。你从掌门做回了长老`);
+    recalcLords(true);
+    return choice;
+  }
+  if(choice==='人'){
+    const g=pr.champ?findNpc(pr.champ):null;
+    if(g){
+      c.inner=c.inner.filter(x=>x!==g.name);
+      g.relation='旧识'; g.faction=lordFactionOf(pr.from,R)?lordFactionOf(pr.from,R).name:'散人';
+      g.follow=false;
+      g['好感度']=clamp(num(g['好感度'])-20);
+      clanMorale(-8);
+      ledger(`把${g.name}交了出去`);
+      news(`${g.name}被送去了界主那边。门里没人说话`);
+    }
+    if(n) n['好感度']=clamp(num(n['好感度'])+15);
+    return choice;
+  }
+  if(choice==='钱'){
+    const v=Math.min(num(c.treasury), num(pr.money));
+    c.treasury=Math.max(0,num(c.treasury)-v);
+    clanMorale(-5);
+    if(n) n['好感度']=clamp(num(n['好感度'])+15);
+    ledger(`给界主送了${v}两`);
+    news(`公中一下子空了${v}两。账房的脸色不太好看`);
+    return choice;
+  }
+  // 回绝
+  if(n) n['好感度']=clamp(num(n['好感度'])-30);
+  c.lordWarDue=num(S.months)+rnd(3,12);
+  ledger(`回绝了${pr.from}，梁子结下了`);
+  news(`${pr.from}那边放了话：这事没完`);
+  return '拒';
+}
+
 
 /* ================= 伤残 ================= */
 // 败北不只是掉血：断手、跛足、破相、暗伤、被废修为，都是跟一辈子的
@@ -4515,7 +5328,7 @@ function stateBlocks(){
   return `【当前时间】${S.date}（第${S.turn}回合）
 【当前所在】${jieName()}${(S.homeRealm&&S.realm!==S.homeRealm)?`（主角生在${S.homeRealm}，如今人在异界）`:''}
 【幽墟之门】${S.gateOpen?'此刻开着，本月底合上——这个月里幽墟的东西会打上来，人也能从轮枢下去':`未开，${gateLeft()} 个月后（${gateMonthName()}）开`}${S.abyssSafe?'（轮外之物已被斩，幽墟如今是走得的地方，不再有东西打上来）':''}${inAbyss()?'\n'+bossBlock():''}${erosionLine()?'\n'+erosionLine():''}
-${situBlock()}
+${situBlock()}${clanLine()}
 【当前场景】${S.scene?`主角现在${S.scene.location||'未知地点'}。未了结的事：${asArr(S.scene.unresolved).join('；')||'无'}`:'见最近剧情'}
 【主角姓名】${p.name}${p.biaozi?`（字${p.biaozi}）`:''}——${nameRule(p)}称呼口径：${addrLine(p)}。绝不可换成别的姓或别的名字。
 【主角画像】${npcPortrait(p)||'（未定）'}——后文写主角的相貌衣着须与这幅画像相符
@@ -6879,8 +7692,208 @@ async function fightOuter(){
   }
   rebuildStatus(); renderPanel(); renderWorld(); saveGame();
 }
+
+
+/* ---- 宣战弹窗与战报（规范 6.1—6.5）---- */
+let warPick={foe:'', champ:'', report:null};
+function openClanWar(){
+  if(!S||S.over||!hasClan()) return;
+  warPick={foe:'', champ:'', report:null};
+  renderClanWar();
+  $('clanWarMask').classList.add('on');
+}
+function renderClanWar(){
+  const c=clan(); if(!c) return;
+  $('clanWarSub').textContent=`${c.name}　权势 ${Math.round(num(c.power))}　门战力 ${clanForceOf(c)}　人心 ${Math.round(num(c.morale))}`;
+  const rep=warPick.report;
+  if(rep){
+    const names=['掌门阵','门人阵','声势阵'];
+    $('clanWarBody').innerHTML=`<div class="warhead">${esc(rep.title)}</div>`
+      +rep.rolls.map((x,i)=>`<div class="warrow ${x.success?'won':'lost'}"><span class="wn">${names[i]}</span>`
+        +`<span class="wd">${esc(x.attr)}${x.val} 掷 <b>${x.roll}</b> → ${x.total} vs 难 ${x.need}</span>`
+        +`<span class="wr">${x.success?'胜':'负'}${x.crit?'·'+esc(x.crit):''}</span></div>`).join('')
+      +`<div class="note">${esc(rep.text)}</div>`;
+    $('clanWarGo').style.display='none';
+    return;
+  }
+  $('clanWarGo').style.display='';
+  const list=clanWarTargets();
+  let h=list.length?list.map(t=>`<div class="crossopt ${t.why?'off':''} ${warPick.foe===t.f.name?'pick':''}" data-k="${esc(t.f.name)}">
+      <span class="cs">${t.f.alignment==='邪道'?'☠':(t.f.alignment==='正派'?'✦':'◆')}</span>
+      <span class="cn"><b>${esc(t.f.name)}</b><small>${esc(t.why||((t.f.leader||'无人当家')+' · '+(t.f.type||'门户')))}</small></span>
+      <span class="cc">权势 ${num(t.f.power)}</span></div>`).join(''):'<div class="empty">本界没有别家可打</div>';
+  const ch=clanChamps();
+  h+=`<div class="crow" style="margin-top:8px"><label>掌门阵</label><div class="csegs">`
+    +`<span class="cseg${warPick.champ?'':' on'}" data-c="">你自己上</span>`
+    +ch.map(n=>`<span class="cseg${warPick.champ===n.name?' on':''}" data-c="${esc(n.name)}">${esc(n.name)}（修为${num(n['修为'])}）</span>`).join('')
+    +`</div></div>`;
+  h+=`<div class="note">三阵取两胜。派亲传替你上掌门阵：赢面看他的修为，输了伤也落在他身上（有可能回不来）。</div>`;
+  if(warPick.foe){
+    const f=factionOf(warPick.foe);
+    if(f) h+=`<div class="note">打赢：${esc(f.name)}权势砍半，砍掉的那一半里六成并进本门，弟子来三成。打输：本门权势掉两成、散两成人、人心 −20。</div>`;
+  }
+  $('clanWarBody').innerHTML=h;
+  $('clanWarBody').querySelectorAll('.crossopt').forEach(el=>el.onclick=()=>{
+    const t=list.find(x=>x.f.name===el.dataset.k);
+    if(!t) return;
+    if(t.why){ toast(t.why); return; }
+    warPick.foe=t.f.name; renderClanWar();
+  });
+  $('clanWarBody').querySelectorAll('.cseg').forEach(el=>el.onclick=()=>{ warPick.champ=el.dataset.c; renderClanWar(); });
+}
+function doClanWar(){
+  if(!warPick.foe){ toast('先挑一家'); return; }
+  const nm=warPick.foe;
+  const res=clanWar(nm, warPick.champ);
+  if(!res) return;
+  warPick.report={rolls:res.rolls,
+    title:`${clan()?clan().name:'本门'} 对 ${nm}：三阵胜了 ${res.wins} 阵`,
+    text:res.win?`赢了。${nm}折了一半权势，来了一批人。`:`败了。本门元气大伤——细账在起居注和见闻里。`};
+  renderClanWar();
+  renderPanel(); renderWorld(); saveGame();
+}
+function doPress(choice){
+  if(!S||S.over) return;
+  const r=answerPress(choice);
+  if(r) toast({'应':'结了盟','拒':'回绝了','投':'并进去了','人':'交了人','钱':'交了钱'}[r]||'回了话');
+  renderPanel(); renderWorld(); saveGame();
+}
+// 本门卡上的界主来使：像界门卡的征召一样，直接把按钮摆出来
+function clanPressHtml(){
+  const c=clan(); const pr=c&&c.press; if(!pr) return '';
+  const left=Math.max(0,CLAN_PRESS_WAIT-(num(S.months)-num(pr.at)));
+  let h=`<div class="quest hot" style="margin-top:6px"><div class="qt"><span>${esc(pr.from)}派人来了</span><small>${left} 个月内回话</small></div>`
+   +`<div class="qd">${esc(pr.kind==='拉'?`${pr.from}许本门一个长老位，要与你结盟。盟友归盟友——他那一份权势不算在你头上。`:`${pr.from}要本门投效，或交出一个亲传，或交公中的三成（${pr.money} 两）。回绝的话，他多半会带人来。`)}</div>`;
+  if(pr.kind==='拉') h+=`<div class="gaterow" style="display:flex;gap:6px;margin-top:4px"><button class="mbtn primary" data-press="应" style="flex:1">结盟</button><button class="mbtn" data-press="拒" style="flex:1">回绝</button></div>`;
+  else h+=`<div class="gaterow" style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">`
+    +`<button class="mbtn" data-press="投" style="flex:1 1 45%">投效</button>`
+    +`<button class="mbtn" data-press="人" style="flex:1 1 45%"${pr.champ?'':' disabled'}>交${pr.champ?esc(pr.champ):'人'}</button>`
+    +`<button class="mbtn" data-press="钱" style="flex:1 1 45%">交 ${pr.money} 两</button>`
+    +`<button class="mbtn" data-press="拒" style="flex:1 1 45%">回绝</button></div>`;
+  return h+'</div>';
+}
+
+/* ---- 门派页（规范 5.3）：不往主界面加按钮，全挂在万界页的「本门」卡里 ---- */
+function clanTypeList(){
+  const j=JIE[jieName()]||JIE['东荒'];
+  return String(j.factionTypes||'').split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
+}
+function renderClan(){
+  const box=$('clanCard'); if(!box||!S||!S.player) return;
+  const sub=$('clanSub'), body=$('clanBody'); if(!sub||!body) return;
+  const c=clan();
+  if(!c){
+    sub.textContent='你还没有门户';
+    const why=clanFoundBlock(), sz=S.sect?clanSeizeBlock():'没有师门';
+    let h='<div class="note">门派的权势直接算进界主分那五成——自己开一家，或者把现成的接过来。</div>';
+    h+=`<div class="gaterow"><button class="mbtn primary" id="clanFoundBtn"${why?' disabled':''} style="flex:1">开宗立派（${clanFoundCost()} 两）</button></div>`;
+    h+=`<div class="note">${esc(why||`修为 ${clanWuNeed()}、声望 ${CLAN_FAME_NEED}、银钱 ${clanFoundCost()} 两，都够了。`+(jieName()==='轮枢'?'轮枢不设界主——在这儿立的字号不入界主之争。':''))}</div>`;
+    if(S.sect){
+      h+=`<div class="gaterow"><button class="mbtn" id="clanSeizeBtn"${sz?' disabled':''} style="flex:1">接掌${esc(S.sect.name)}</button></div>`;
+      h+=`<div class="note">${esc(sz||'贡献到顶、也压得住当家的——三阵取两胜这一门就是你的（接过来的人心浮动，权势当场掉两成）。')}</div>`;
+    }
+    body.innerHTML=h;
+    const b1=$('clanFoundBtn'); if(b1&&!why) b1.onclick=openClanFound;
+    const b2=$('clanSeizeBtn'); if(b2&&!sz) b2.onclick=doClanSeize;
+    return;
+  }
+  const far=!clanHere();
+  sub.textContent=`${c.type||'门户'} · ${c.align||'中立'} · ${c.realm}${c.base?'·'+c.base:''}`;
+  const tgt=clanPowerTarget(), inc=clanIncome(), out=clanUpkeep();
+  let h=`<div class="faction"><div class="fl"><span><b>${esc(c.name)}</b> <small>你是${clanHeadTitle()}${c.taken?' · 接手':''}</small></span><small>权势 ${Math.round(num(c.power))}${tgt!==Math.round(num(c.power))?`<span style="color:var(--ink-faint)"> → ${tgt}</span>`:''}</small></div>`
+   +`<div class="bar" style="height:6px"><i style="width:${pw(c.power)}%;background:${c.align==='邪道'?'#5a3a6a':c.align==='正派'?'#4a6b45':'#7a6a50'}"></i></div></div>`;
+  h+=`<div style="font-size:13px;line-height:1.9;margin-top:4px">`
+   +`弟子 <b>${num(c.disciples)}</b>/${clanCap()} 人　火候 <b>${num(c.quality)}</b>${num(c.quality)>=CLAN_QUAL_CAP?'（到顶）':''}　亲传 <b>${c.inner.length}</b>/${CLAN_INNER_CAP}<br>`
+   +`人心 <b style="color:${num(c.morale)<30?'var(--accent)':'inherit'}">${Math.round(num(c.morale))}</b>（${clanMoraleLabel()}）　公中 <b>${num(c.treasury)}</b> 两　每月 进 ${inc} / 出 ${out}${num(c.arrears)?`<br><span style="color:var(--accent)">已欠 ${num(c.arrears)} 个月的用度——再拖人就散了</span>`:''}`
+   +(far?`<br><span style="color:var(--accent)">你不在${esc(c.realm)}，门里的事管不着，人心每月还要掉</span>`:'')
+   +(clanCountsForLord()?'':'<br><span style="color:var(--ink-faint)">轮枢不设界主，这一门的权势不入界主之争</span>')
+   +`</div>`;
+  const foes=Object.keys(c.wars||{}).filter(k=>num(S.months)-num(c.wars[k])<CLAN_WAR_COOL);
+  if(c.ally||foes.length||num(c.wins)||num(c.losses)) h+=`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:4px">`
+   +`战绩 ${num(c.wins)} 胜 ${num(c.losses)} 负${(num(c.wins)*3-num(c.losses)*4)?`（权势 ${num(c.wins)*3-num(c.losses)*4>0?'+':''}${Math.max(-15,Math.min(10,num(c.wins)*3-num(c.losses)*4))}）`:''}`
+   +`${c.ally?`　盟友 <b>${esc(c.ally)}</b>`:''}${foes.length?`　近一年动过手：${foes.map(esc).join('、')}`:''}</div>`;
+  if(c.lordWarDue!=null) h+=`<div class="note" style="color:var(--accent)">${esc((S.lords[c.realm]||{}).name||'界主')}放了话要来收拾本门——门里正在备战</div>`;
+  if(c.inner.length) h+=`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:4px">亲传：${c.inner.map(nm=>{const n=findNpc(nm);return n?esc(n.name)+`（修为${num(n['修为'])}${n.follow?'·随行':''}）`:esc(nm);}).join('、')}</div>`;
+  const rWhy=far?`你不在${c.realm}`:clanRecruitBlock();
+  const tWhy=far?`你不在${c.realm}`:clanTeachBlock();
+  const pWhy=far?`你不在${c.realm}`:clanPromoteBlock();
+  h+=`<div class="gaterow" style="gap:6px;display:flex;margin-top:6px">`
+   +`<button class="mbtn" id="clanRecruitBtn"${rWhy?' disabled':''} style="flex:1">开山门</button>`
+   +`<button class="mbtn" id="clanTeachBtn"${tWhy?' disabled':''} style="flex:1">授业</button>`
+   +`<button class="mbtn" id="clanPromoteBtn"${pWhy?' disabled':''} style="flex:1">拔擢亲传</button></div>`;
+  h+=`<div class="note">${esc(rWhy||`开山门难度 ${clanRecruitDC()}（凭谈吐，一月一次；山门容得下 ${clanCap()} 人，现有 ${num(c.disciples)}）`)}｜${esc(tWhy||`授业难度 ${clanTeachDC()}（凭学识，一月一次）`)}｜${esc(pWhy||'从门下拔一个上来（凭学识）')}</div>`;
+  const wWhy=far?`你不在${c.realm}`:(clanWarTargets().every(t=>t.why)?'眼下没有打得了的对手':'');
+  h+=`<div class="gaterow" style="margin-top:6px"><button class="mbtn" id="clanWarBtn"${wWhy?' disabled':''} style="width:100%">宣战（三阵取两胜）</button></div>`;
+  if(wWhy) h+=`<div class="note">${esc(wWhy)}</div>`;
+  h+=clanPressHtml();
+  h+=`<div class="gaterow" style="gap:6px;display:flex;align-items:center;margin-top:4px">`
+   +`<input id="clanAmt" type="number" min="1" value="200" style="width:74px;padding:3px 5px;font:inherit;font-size:13px">`
+   +`<button class="mbtn" id="clanFundBtn" style="flex:1">补贴公中</button>`
+   +`<button class="mbtn" id="clanDrawBtn"${c.drawCd===num(S.months)?' disabled':''} style="flex:1">从公中支取</button></div>`;
+  h+=`<div class="note">补贴随意；支取一月一次、一次至多公中的三成（眼下 ${clanDrawCap()} 两），每支一回人心 −5——门中人看在眼里。</div>`;
+  body.innerHTML=h;
+  const rb=$('clanRecruitBtn'); if(rb&&!rWhy) rb.onclick=()=>doClanAct(clanRecruit);
+  const tb=$('clanTeachBtn');   if(tb&&!tWhy) tb.onclick=()=>doClanAct(clanTeach);
+  const pb=$('clanPromoteBtn'); if(pb&&!pWhy) pb.onclick=()=>doClanAct(clanPromote);
+  const wb=$('clanWarBtn'); if(wb&&!wWhy) wb.onclick=openClanWar;
+  body.querySelectorAll('button[data-press]').forEach(b=>b.onclick=()=>doPress(b.dataset.press));
+  const fb=$('clanFundBtn'); if(fb) fb.onclick=()=>{ const v=num($('clanAmt').value); if(!clanFund(v)) toast('私房不够'); else{ toast(`贴了 ${v} 两进公中`); renderPanel(); renderWorld(); saveGame(); } };
+  const db=$('clanDrawBtn'); if(db) db.onclick=()=>{ const v=num($('clanAmt').value); if(!clanDraw(v)) toast('公中不够，或这个月已经支过了'); else{ toast(`从公中支了 ${v} 两（人心 −5）`); renderPanel(); renderWorld(); saveGame(); } };
+}
+function doClanAct(fn){
+  if(!S||S.over) return;
+  const r=fn();
+  if(r&&r.r){
+    const c=r.r;
+    toast(`${c.attr}${c.val} 掷 ${c.roll} → ${c.total} vs 难 ${c.need}　${c.success?'✓ 成':'✗ 败'}${c.crit?' · '+c.crit:''}`, c.success?'':'bad');
+  }
+  renderPanel(); renderWorld(); saveGame();
+}
+function doClanSeize(){
+  if(!S||S.over) return;
+  const res=clanSeize();
+  if(res) toast(res.win?`三阵胜了 ${res.wins} 阵——这一门是你的了`:`三阵只胜了 ${res.wins} 阵，没接下来`, res.win?'':'bad');
+  renderPanel(); renderWorld(); saveGame();
+}
+/* 开宗立派：名字、类型、正邪、驻地四样全由玩家定，不走模型——
+   名字是这一局最有记忆点的东西，不能让模型代笔 */
+let clanPick={type:'',align:'中立',base:''};
+function openClanFound(){
+  if(!S||S.over||clanFoundBlock()) return;
+  const types=clanTypeList(), places=placeList(jieName());
+  clanPick={type:types[0]||'', align:'中立', base:places[0]||''};
+  $('clanFoundSub').textContent=`在${jieName()}开山门，置产开办要 ${clanFoundCost()} 两。`+(S.sect?`你得先离开${S.sect.name}。`:'');
+  renderClanFound();
+  $('clanMask').classList.add('on');
+}
+function renderClanFound(){
+  const types=clanTypeList(), places=placeList(jieName());
+  const seg=(arr,cur,key)=>arr.map(x=>`<span class="cseg${x===cur?' on':''}" data-key="${key}" data-v="${esc(x)}">${esc(x)}</span>`).join('');
+  $('clanFoundBody').innerHTML=
+     `<div class="crow"><label>字号</label><input id="clanName" maxlength="12" placeholder="按${jieName()}的路数起个名" value="${esc(($('clanName')&&$('clanName').value)||'')}"></div>`
+    +`<div class="crow"><label>类型</label><div class="csegs">${seg(types,clanPick.type,'type')}</div></div>`
+    +`<div class="crow"><label>正邪</label><div class="csegs">${seg(['正派','中立','邪道'],clanPick.align,'align')}</div></div>`
+    +`<div class="crow"><label>驻地</label><div class="csegs">${seg(places.slice(0,10),clanPick.base,'base')}</div></div>`
+    +`<div class="note">位阶叫法按类型走：${esc(rankSetOf(clanPick.type).join(' → '))}</div>`;
+  $('clanFoundBody').querySelectorAll('.cseg').forEach(el=>el.onclick=()=>{
+    clanPick[el.dataset.key]=el.dataset.v; renderClanFound();
+  });
+}
+function doClanFound(){
+  const el=$('clanName'), nm=String(el?el.value:'').trim();
+  if(!nm){ toast('先起个字号'); return; }
+  const bad=cleanWord(nm, jieName());
+  if(bad!==nm){ toast(`「${nm}」不是${jieName()}的路数`); return; }
+  if(factionOf(nm)){ toast(`${jieName()}已经有一家叫${nm}了`); return; }
+  if(!foundClan({name:nm, type:clanPick.type, align:clanPick.align, base:clanPick.base})){ toast('开不了'); return; }
+  $('clanMask').classList.remove('on');
+  toast(`${nm}立起来了`);
+  renderPanel(); renderWorld(); saveGame();
+}
+
 function renderWorld(){
   renderLore();
+  renderClan();
   treasureSync();
   renderTreasures();
   renderGate();
@@ -7196,6 +8209,10 @@ function openCreate(){
 }
 $('crCancel').onclick=()=>{ $('createMask').classList.remove('on'); applyRealmTheme(); };
 $('crossCancel').onclick=()=>$('crossMask').classList.remove('on');
+$('clanFoundCancel').onclick=()=>$('clanMask').classList.remove('on');
+$('clanFoundGo').onclick=doClanFound;
+$('clanWarCancel').onclick=()=>$('clanWarMask').classList.remove('on');
+$('clanWarGo').onclick=doClanWar;
 $('goalClose').onclick=()=>$('goalMask').classList.remove('on');
 $('goalMask').onclick=e=>{ if(e.target===$('goalMask')) $('goalMask').classList.remove('on'); };
 $('crStart').onclick=()=>{
@@ -7906,6 +8923,8 @@ document.addEventListener('keydown',e=>{
   if($('convoMask').classList.contains('on')){ endConvo(); return; }
   if($('npcMask').classList.contains('on')){ $('npcMask').classList.remove('on'); return; }
   if($('goalMask').classList.contains('on')){ $('goalMask').classList.remove('on'); return; }
+  if($('clanWarMask').classList.contains('on')){ $('clanWarMask').classList.remove('on'); return; }
+  if($('clanMask').classList.contains('on')){ $('clanMask').classList.remove('on'); return; }
   if($('crossMask').classList.contains('on')){ $('crossMask').classList.remove('on'); return; }
   if($('saveMask').classList.contains('on')){ $('saveMask').classList.remove('on'); return; }
   if($('settingsMask').classList.contains('on')&&cfg.key){ $('settingsMask').classList.remove('on'); return; }

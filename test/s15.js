@@ -116,10 +116,10 @@ ok('寿元那一行写明是哪一境给的', await page.evaluate(()=>{
   const t=$('pMeta').textContent; window.__meta=t; return t.includes('寿元400')&&t.includes('之寿'); }));
 
 console.log('\n【存档】');
-ok('存档版本到 23，老档能迁上来', await page.evaluate(async()=>{
-  if(SAVE_VERSION!==23) return false;
+ok('存档版本到 25，老档能迁上来', await page.evaluate(async()=>{
+  if(SAVE_VERSION!==25) return false;
   const d=JSON.parse(JSON.stringify(S)); d.v=21; d.player.lifespan=78; d.player.attributes['修为']=60;
-  const m=migrate(d); return m.v===23&&num(m.player.lifespan)>78; }));
+  const m=migrate(d); return m.v===25&&num(m.player.lifespan)>78; }));
 
 console.log('\n通过 '+oks.length+' 项，失败 '+fails.length+' 项');
 if(fails.length){ console.log('miss=',await page.evaluate(()=>window.__miss)); console.log('rk=',await page.evaluate(()=>window.__rk)); console.log('meta=',await page.evaluate(()=>window.__meta)); console.log('la=',await page.evaluate(()=>window.__la)); }
