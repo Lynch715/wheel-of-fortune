@@ -258,6 +258,17 @@ body{
 .avpick .cell{background-size:cover}
 .avpick .cell.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--chip-line)}
 .avpick .auto{display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1.2;text-align:center;color:var(--ink-soft);background:var(--paper-dark);border:2px dashed var(--paper-edge)}
+#faceMask .modal{max-width:580px}
+.facetabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;align-items:center}
+.facetabs button{padding:5px 11px;font-size:13px;border:1px solid var(--paper-edge);background:var(--paper-dark);border-radius:14px;cursor:pointer;color:var(--ink-soft);min-height:32px}
+.facetabs button.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.facetabs .fg{display:flex;gap:6px;margin-left:auto}
+#faceGrid{max-height:300px;grid-template-columns:repeat(auto-fill,minmax(48px,1fr))}
+#faceGrid .add{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--ink-soft);background:var(--paper-dark);border:2px dashed var(--paper-edge)}
+#faceGrid .note{grid-column:1/-1}
+#faceDescRow input{width:100%;box-sizing:border-box}
+#pFace{cursor:pointer}
+.facebtn{padding:2px 10px!important;font-size:12px!important;margin-top:5px;min-height:28px}
 .npc .ninfo{flex:1;min-width:0}
 .npc .nname{font-size:15.5px;font-weight:700}
 .npc .nrel{font-size:12.5px;color:var(--ink-soft)}
@@ -884,6 +895,27 @@ const OUTER_IMG='data:image/webp;base64,UklGRpQZAQBXRUJQVlA4WAoAAAAQAAAAewEAOQIA
   </div>
 </div>
 
+<!-- 换脸（规范 v3.7） -->
+<div class="modal-mask" id="faceMask">
+  <div class="modal" id="faceModal">
+    <h2 id="faceTitle">换一张脸</h2>
+    <div class="facetabs" id="faceTabs"></div>
+    <div class="avpick" id="faceGrid"></div>
+    <div class="note" id="faceNote"></div>
+    <div class="field" id="faceDescRow" style="display:none">
+      <label>这张图的相貌 <small style="color:var(--ink-soft);font-weight:400">—— 一句话，模型按这句写人；不写就沿用原来的</small></label>
+      <input id="faceDesc" maxlength="60" placeholder="如：三十来岁，瘦，穿灰袍，左眉一道疤">
+      <div style="margin-top:6px"><button class="mbtn" id="faceDel" style="padding:3px 10px;font-size:12px">删掉这张图</button></div>
+    </div>
+    <input type="file" id="faceFile" accept="image/*" style="display:none">
+    <div class="mbtnrow">
+      <button class="mbtn" id="faceCancel">合上</button>
+      <button class="mbtn" id="faceAuto">随天意</button>
+      <button class="mbtn primary" id="faceOk">用这张</button>
+    </div>
+  </div>
+</div>
+
 <!-- 比武弹窗 -->
 <div class="modal-mask" id="duelMask">
   <div class="modal wide" id="duelModal">
@@ -1305,7 +1337,7 @@ function avBucket(gender,age,realm){
 // 立绘是稀疏的：art/万界/portraits 下画了哪个桶就有哪个，其余退回小头像
 function porOf(n){
   try{
-    if(typeof POR_IMG==='undefined'||!n) return null;
+    if(typeof POR_IMG==='undefined'||!n||n.face) return null;   // 用了自己的图就不出立绘
     const slot=avSlotOf(n);
     return (slot&&POR_IMG[slot])||null;
   }catch(_){ return null; }
@@ -1317,6 +1349,7 @@ const BOSS_AV={'波旬':'x_boss_east','蚩尤残魂':'x_boss_east','申公豹':'
   '吞噬者':'x_devourer','蚀主':'x_devourer'};
 function avSlotOf(n){
   if(!n) return null;
+  if(n.avatarPick&&n.avatar&&AV_SLOTS.indexOf(n.avatar)>=0) return n.avatar;   // 玩家手选的脸压过一切（v3.7）
   if(BOSS_AV[n.name]&&AV_SLOTS.indexOf(BOSS_AV[n.name])>=0) return BOSS_AV[n.name];
   if(n.avatar&&AV_SLOTS.indexOf(n.avatar)>=0) return n.avatar;
   const slot=avPickSlot(n);
@@ -1388,7 +1421,8 @@ function avCellStyle(slot){
 // 没图就退回原来的首字圆牌，绝不开天窗
 function avatarFace(n,cls,size,me){
   const ring=avRing(n,me), dead=n&&n.alive===false;
-  const cell=avCellStyle(avSlotOf(n));                      // 有画像就用画像
+  const cf=faceImg(n);
+  const cell=cf?`background-image:url('${cf}');background-size:cover;background-position:center`:avCellStyle(avSlotOf(n));   // 自己的图 > 图集 > 墨影
   const sz=size?`width:${size}px;height:${size}px;`:'';
   const st=cell?`${cell};box-shadow:inset 0 0 0 2px ${ring}`
               :`background-image:url('${inkFace(n,me)}');background-size:cover;box-shadow:inset 0 0 0 2px ${ring}`;
@@ -7366,7 +7400,7 @@ function showNpc(n){
   ];
   const npor=porOf(n);
   let html=(npor?`<img class="npcpor" src="${npor}" alt="">`:'')
-    + `<div class="npchead">${npor?'':avatarFace(n,'',null)}<div class="nh">${esc(n.alignment||'中立')} · ${esc(n.relation||'')}<br>${esc(n.identity||'')}${n.faction?'　'+esc(n.faction):''}</div></div>`
+    + `<div class="npchead">${npor?'':avatarFace(n,'',null)}<div class="nh">${esc(n.alignment||'中立')} · ${esc(n.relation||'')}<br>${esc(n.identity||'')}${n.faction?'　'+esc(n.faction):''}<br><button class="mbtn facebtn" id="npcFaceBtn">换脸</button></div></div>`
     + rows.map(([k,v])=>`<div class="nrow"><b>${k}</b><span>${esc(v)}</span></div>`).join('');
   if(tiesOf(n.name).length) html+=`<div class="nrow"><b>旧交</b><span>${esc(tieText(n.name,10))}</span></div>`;
   if(n.memory&&n.memory.length) html+=`<div class="nrow"><b>往来</b><span>${esc(n.memory.join('；'))}</span></div>`;
@@ -7379,6 +7413,7 @@ function showNpc(n){
       <span style="font-size:12px;color:var(--ink-faint)">${S.player.money<cost?'（家财不够）':'（备重礼赔罪，追杀进度大减）'}</span></div>`;
   }
   $('npcMBody').innerHTML=html;
+  { const fcb=$('npcFaceBtn'); if(fcb) fcb.onclick=()=>openFace(n); }
   const ap=$('npcAppease');
   if(ap) ap.onclick=()=>{
     const cost=Math.max(50,Math.round(ven.heat*15));
@@ -8572,15 +8607,16 @@ function setDot(tab,on){ const d=$(tab==='people'?'dotPeople':'dotWorld'); if(d)
 
 /* ================= 章节库（IndexedDB） ================= */
 // 章节正文很占地方，全塞 localStorage 迟早撑爆，挪到 IndexedDB 里
-const IDB_NAME='wanjie_book', IDB_STORE='chapters';
+const IDB_NAME='wanjie_book', IDB_STORE='chapters', IDB_FACES='faces';
 let idbP=null;
 function idb(){
   if(idbP) return idbP;
   idbP=new Promise((res,rej)=>{
     if(typeof indexedDB==='undefined') return rej(new Error('no idb'));
-    const rq=indexedDB.open(IDB_NAME,1);
+    const rq=indexedDB.open(IDB_NAME,2);            // v2：加 faces（玩家上传的头像）
     rq.onupgradeneeded=()=>{
       const db=rq.result;
+      if(!db.objectStoreNames.contains(IDB_FACES)) db.createObjectStore(IDB_FACES,{keyPath:'id'});
       if(!db.objectStoreNames.contains(IDB_STORE)){
         const st=db.createObjectStore(IDB_STORE,{keyPath:'id'});
         st.createIndex('run','run',{unique:false});
@@ -8705,6 +8741,173 @@ function loadGame(){
   return true;
 }
 
+/* ================= 换脸（规范 v3.7） =================
+   两种换法：从图集挑一格（n.avatar + n.avatarPick），或者用自己的图（n.face 指向 FACES 里的一张）。
+   自己的图存在 IndexedDB，不进存档那一格；导出存档时才把用到的几张一并打包。
+   图没载到（换了设备、清了浏览器）就退回图集那张，不开天窗，也不把 n.face 抹掉。 */
+var FACES={};   // var：万一哪里在这段之前就画了头像，也不至于 TDZ 报错
+function faceImg(n){ return (n&&n.face&&FACES[n.face])?FACES[n.face].img:null; }
+async function facesLoad(){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(IDB_FACES,'readonly');
+    const rq=tx.objectStore(IDB_FACES).getAll();
+    rq.onsuccess=()=>{ const rows=rq.result||[]; for(const r of rows) if(r&&r.id) FACES[r.id]=r; res(rows.length); };
+    rq.onerror=()=>rej(rq.error);
+  });
+}
+async function facePut(rec){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(IDB_FACES,'readwrite');
+    tx.objectStore(IDB_FACES).put(rec);
+    tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
+  });
+}
+async function faceDrop(id){
+  const db=await idb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(IDB_FACES,'readwrite');
+    tx.objectStore(IDB_FACES).delete(id);
+    tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
+  });
+}
+function faceSave(rec){ FACES[rec.id]=rec; facePut(rec).catch(()=>toast('浏览器存不下这张图，这次能用，刷新后就没了')); }
+// 裁成正方形、压到 160：竖图往上偏一点，脸多半在上半截
+function faceShrink(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>rej(fr.error);
+    fr.onload=()=>{
+      const im=new Image();
+      im.onerror=()=>rej(new Error('bad image'));
+      im.onload=()=>{
+        const Z=160, cv=document.createElement('canvas'); cv.width=cv.height=Z;
+        const k=Math.min(im.width,im.height), sx=(im.width-k)/2, sy=(im.height-k)*0.3;
+        cv.getContext('2d').drawImage(im,sx,sy,k,k,0,0,Z,Z);
+        let u=cv.toDataURL('image/webp',0.85);
+        if(!/^data:image\/webp/.test(u)) u=cv.toDataURL('image/jpeg',0.85);   // 老 Safari 不会压 webp
+        res(u);
+      };
+      im.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+function facePeople(){ return S?[S.player].concat(S.npcs||[]).filter(Boolean):[]; }
+// 导出存档时把用到的几张图带上；导入时收回来
+function withFaces(st){
+  const used={};
+  for(const x of [st.player].concat(st.npcs||[])) if(x&&x.face&&FACES[x.face]) used[x.face]={img:FACES[x.face].img, desc:FACES[x.face].desc||''};
+  return Object.keys(used).length?Object.assign({},st,{_faces:used}):st;
+}
+function faceImport(fx){
+  if(!fx||typeof fx!=='object') return 0;
+  let k=0;
+  for(const id in fx){ const f=fx[id]; if(!f||!/^data:image\//.test(String(f.img||''))) continue; faceSave({id, img:f.img, desc:String(f.desc||''), t:Date.now()}); k++; }
+  return k;
+}
+function faceDesc(key){ return /^u_/.test(key||'')?((FACES[key]&&FACES[key].desc)||''):avDesc(key); }
+// 换脸落账：pick 为图集格子 / 'u_…' 自己的图 / null 交还天意
+function setFace(n, pick, desc){
+  if(!n||!S) return;
+  const me=(n===S.player);
+  desc=String(desc||'').trim();
+  if(!pick){
+    delete n.face; delete n.avatarPick;
+    n.avatar=avPickSlot(me?Object.assign({},n,{realm:S.homeRealm||S.realm}):n);
+    const d=avDesc(avSlotOf(n));
+    if(d){ n.portrait=d; if(me) n.appearance=d; }
+  }else if(/^u_/.test(pick)){
+    if(!FACES[pick]) return;
+    n.face=pick;
+    if(desc&&desc!==FACES[pick].desc){ FACES[pick].desc=desc; faceSave(FACES[pick]); }
+    const d=desc||FACES[pick].desc;
+    if(d){ n.portrait=d; if(me) n.appearance=d; }
+  }else{
+    if(AV_SLOTS.indexOf(pick)<0) return;
+    delete n.face; n.avatar=pick; n.avatarPick=true;
+    const d=avDesc(pick);
+    if(d){ n.portrait=d; if(me) n.appearance=d; }
+  }
+  saveGame();
+  try{ renderPanel(); }catch(_){}
+}
+function faceDelete(id){
+  if(!FACES[id]) return;
+  delete FACES[id]; faceDrop(id).catch(()=>{});
+  for(const x of facePeople()) if(x.face===id){ delete x.face; const d=avDesc(avSlotOf(x)); if(d){ x.portrait=d; if(x===S.player) x.appearance=d; } }
+  saveGame(); try{ renderPanel(); }catch(_){}
+}
+const FACE_TABS=[['d','东荒'],['w','西陆'],['s','樱洲'],['h','轮枢'],['x','特型'],['u','自己的图']];
+let faceCtx=null;
+function openFace(n){
+  if(!n||!S) return;
+  const me=(n===S.player);
+  const cur=(n.face&&FACES[n.face])?n.face:avSlotOf(n);
+  const home=REALM_LETTER[(me?(S.homeRealm||S.realm):n.realm)||jieName()]||'d';
+  faceCtx={n, me, sel:cur, g:/女/.test(n.gender||'')?'f':(/男/.test(n.gender||'')?'m':''),
+    tab:/^u_/.test(cur||'')?'u':((cur&&cur[0]==='x')?'x':((cur&&cur[0])||home))};
+  $('faceTitle').textContent=me?'给自己换一张脸':`给「${n.name}」换一张脸`;
+  $('faceDesc').value='';
+  renderFace();
+  $('faceMask').classList.add('on');
+}
+function renderFace(){
+  const c=faceCtx; if(!c) return;
+  const tabs=$('faceTabs');
+  tabs.innerHTML=FACE_TABS.map(([k,t])=>`<button data-t="${k}" class="${c.tab===k?'on':''}">${t}</button>`).join('')
+    +(c.tab==='x'||c.tab==='u'?'':`<span class="fg">`+[['','男女'],['m','男'],['f','女']].map(([k,t])=>`<button data-g="${k}" class="${c.g===k?'on':''}">${t}</button>`).join('')+`</span>`);
+  tabs.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{ c.tab=b.dataset.t; renderFace(); });
+  tabs.querySelectorAll('button[data-g]').forEach(b=>b.onclick=()=>{ c.g=b.dataset.g; renderFace(); });
+  let cells='';
+  if(c.tab==='u'){
+    cells=`<div class="cell add" data-add="1" title="从本机挑一张图">＋</div>`
+      +Object.values(FACES).sort((a,b)=>num(b.t)-num(a.t)).map(f=>`<div class="cell ${c.sel===f.id?'sel':''}" data-a="${esc(f.id)}" title="${esc(f.desc||'')}" style="background-image:url('${f.img}');background-size:cover;background-position:center"></div>`).join('');
+  }else{
+    const list=AV_SLOTS.filter(k=>k[0]===c.tab&&(c.tab==='x'||!c.g||k[2]===c.g));
+    cells=list.map(k=>`<div class="cell ${c.sel===k?'sel':''}" data-a="${k}" title="${esc(avDesc(k))}" style="${avCellStyle(k)||''}"></div>`).join('')
+      ||'<div class="note">这一页还没有图</div>';
+  }
+  const grid=$('faceGrid'); grid.innerHTML=cells;
+  grid.querySelectorAll('.cell').forEach(el=>el.onclick=()=>{
+    if(el.dataset.add){ $('faceFile').click(); return; }
+    c.sel=el.dataset.a; $('faceDesc').value=''; renderFace();
+  });
+  const custom=/^u_/.test(c.sel||'')&&FACES[c.sel];
+  $('faceNote').textContent=c.sel?(custom?(FACES[c.sel].desc?'相貌：'+FACES[c.sel].desc:'这张图还没写相貌，下面写一句，模型才知道他长什么样'):(avDesc(c.sel)?'相貌：'+avDesc(c.sel):'')):'';
+  $('faceDescRow').style.display=custom?'':'none';
+  if(custom&&!$('faceDesc').value) $('faceDesc').value=FACES[c.sel].desc||'';
+  $('faceOk').disabled=!c.sel;
+}
+function closeFace(){ $('faceMask').classList.remove('on'); faceCtx=null; }
+function faceDone(){
+  const c=faceCtx; if(!c) return;
+  const n=c.n; closeFace();
+  if($('npcMask').classList.contains('on')&&!c.me) showNpc(n);
+}
+$('faceCancel').onclick=closeFace;
+$('faceMask').onclick=e=>{ if(e.target===$('faceMask')) closeFace(); };
+$('faceOk').onclick=()=>{ const c=faceCtx; if(!c||!c.sel) return; setFace(c.n,c.sel,$('faceDesc').value); faceDone(); };
+$('faceAuto').onclick=()=>{ const c=faceCtx; if(!c) return; setFace(c.n,null); faceDone(); };
+$('faceDel').onclick=()=>{
+  const c=faceCtx; if(!c||!/^u_/.test(c.sel||'')) return;
+  const who=facePeople().filter(x=>x.face===c.sel).map(x=>x===S.player?'你自己':x.name);
+  if(!confirm(who.length?`删掉这张图？${who.join('、')}会换回原来的脸。`:'删掉这张图？')) return;
+  faceDelete(c.sel); c.sel=(c.n.face&&FACES[c.n.face])?c.n.face:avSlotOf(c.n); renderFace();
+};
+$('faceFile').onchange=async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value='';
+  if(!f||!faceCtx) return;
+  try{
+    const img=await faceShrink(f);
+    const rec={id:'u_'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36), img, desc:'', t:Date.now()};
+    faceSave(rec);
+    faceCtx.tab='u'; faceCtx.sel=rec.id; $('faceDesc').value=''; renderFace();
+    try{ $('faceDesc').focus(); }catch(_){}
+  }catch(_){ toast('这张图读不出来，换一张试试'); }
+};
+
 /* ================= 界面事件 ================= */
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('on'));
@@ -8717,6 +8920,8 @@ function setDrawer(open){ $('sidebar').classList.toggle('open',open); $('sideMas
 $('panelToggle').onclick=()=>setDrawer(!$('sidebar').classList.contains('open'));
 $('sideMask').onclick=()=>setDrawer(false);
 $('sendBtn').onclick=()=>act($('freeInput').value,null);
+$('pFace').onclick=()=>{ if(S&&S.player) openFace(S.player); };
+$('pFace').title='点一下换脸';
 $('freeInput').addEventListener('keydown',e=>{ if(e.key==='Enter') act($('freeInput').value,null); });
 $('btnNew').onclick=()=>{ if(!S||confirm('另起一局将覆盖当前进度（可先在「存档阁」存入存档位或导出）。确定？')) openCreate(); };
 function download(name,text,type){
@@ -8784,7 +8989,7 @@ $('svClose').onclick=()=>$('saveMask').classList.remove('on');
 $('saveMask').onclick=e=>{ if(e.target===$('saveMask')) $('saveMask').classList.remove('on'); };
 $('svExportJson').onclick=()=>{
   if(!S){ toast('尚无进度可存'); return; }
-  download(`命运之轮_存档_${S.player.name}_第${S.turn}回.json`, JSON.stringify(S,null,1), 'application/json');
+  download(`命运之轮_存档_${S.player.name}_第${S.turn}回.json`, JSON.stringify(withFaces(S),null,1), 'application/json');
 };
 $('svImportJson').onclick=()=>$('importFile').click();
 $('svExportBook').onclick=exportBook;
@@ -8793,7 +8998,7 @@ $('importFile').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onload=()=>{
-    try{ const d=JSON.parse(r.result); if(!d.player) throw 0; S=migrate(d); saveGame(); loadGame(); toast('读档成功，续写此生'); }
+    try{ const d=JSON.parse(r.result); if(!d.player) throw 0; const fx=d._faces; delete d._faces; faceImport(fx); S=migrate(d); saveGame(); loadGame(); toast('读档成功，续写此生'); }
     catch(_){ toast('存档文件无法识别'); }
   };
   r.readAsText(f);
@@ -9096,6 +9301,7 @@ async function doPwaInstall(){
 
 /* ================= 启动 ================= */
 (function boot(){
+  facesLoad().then(k=>{ if(k&&S&&S.player){ try{ renderPanel(); }catch(_){} } }).catch(()=>{});
   if(window.__Pdone) window.__Pdone();
   applyRealmTheme();
   if(loadGame()){ applyRealmTheme(); toast('已载入上次进度'); return; }
