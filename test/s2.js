@@ -202,7 +202,7 @@ ok('老存档升到 v9：功法物件补上来路', await page.evaluate(()=>{
       && s.player.items['其他'][0].from==='西陆' && s.foreignFrom===12;
 }));
 ok('风闻固定两条', await page.evaluate(()=>turnPrompt('试',{fate:10,months:1}).includes('rumors**固定写两条**')));
-ok('随心所欲档写明不得推翻已成定局', await page.evaluate(()=>FREEDOM.free.tone.includes('已经成了定局的事')&&FREEDOM.free.tone.includes('不能当那件事没发生过')));
+ok('随心所欲档写明不得推翻已成定局', await page.evaluate(()=>FREE_LAW.includes('已成定局的事')&&FREE_LAW.includes('不能当那件事没发生过')));   // v3.6 起这两条挪进了【言出法随】
 ok('三档都写了「尝试 vs 结果」', await page.evaluate(()=>
   FREEDOM.free.tone.includes('尝试')&&FREEDOM.mid.tone.includes('不决定成败')&&FREEDOM.strict.tone.includes('不是结果')));
 ok('判定尺子三处同一套', await page.evaluate(()=>{
