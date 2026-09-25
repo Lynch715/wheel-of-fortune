@@ -57,3 +57,7 @@ RUNS=20 node test/run.js   # 跑量：三个出生界各 20 局
 ## 美术
 
 图都压成 WebP base64 嵌在 `index.html` 里了，所以仓库里没有原图（本地 700 MB 上下）。要重新打包，把原图放回 `art/万界/` 再跑 `python3 art/万界/build.py`。
+
+## 反馈
+
+玩到 bug、有想法、想聊聊，加微信 **lynchrrr**。游戏里「设置」底部也有这一条，点一下能复制。

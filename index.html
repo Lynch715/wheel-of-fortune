@@ -862,6 +862,11 @@ const OUTER_IMG='data:image/webp;base64,UklGRpQZAQBXRUJQVlA4WAoAAAAQAAAAewEAOQIA
       <button class="mbtn" id="cfgTest" style="width:100%">⚡ 测一下这三项通不通</button>
       <div class="note" id="cfgTestMsg">真发一次请求试试，不动已存的设置</div>
     </div>
+    <div class="field">
+      <label>找作者</label>
+      <button class="mbtn" id="cfgWx" style="width:100%">微信 lynchrrr（点一下复制）</button>
+      <div class="note" id="cfgWxNote">玩到 bug、有想法、想聊聊，都可以加我</div>
+    </div>
     <div class="mbtnrow">
       <button class="mbtn" id="cfgCancel">关闭</button>
       <button class="mbtn primary" id="cfgSave">保存</button>
@@ -9191,6 +9196,12 @@ document.addEventListener('keydown',e=>{
 });
 $('settingsMask').onclick=e=>{ if(e.target===$('settingsMask')&&cfg.key) $('settingsMask').classList.remove('on'); };
 $('cfgTest').onclick=()=>testConn();
+$('cfgWx').onclick=async()=>{
+  const b=$('cfgWx'),n=$('cfgWxNote');
+  try{await navigator.clipboard.writeText('lynchrrr');n.textContent='已复制，去微信搜一下就行';}
+  catch(e){n.textContent='复制不了，手动抄一下：lynchrrr';}
+  setTimeout(()=>{n.textContent='玩到 bug、有想法、想聊聊，都可以加我';},2500);
+};
 
 let toastTimer=null;
 function toast(msg,cls){
