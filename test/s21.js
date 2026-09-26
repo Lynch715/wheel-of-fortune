@@ -85,12 +85,12 @@ await page.waitForFunction(()=>!busy,null,{timeout:25000}).catch(()=>{}); await 
 ok('下一回合发出去的提示词里，他的相貌是新格子的描述', sent.join('\n').includes((await ev(k=>avDesc(k),xk)).slice(0,12)));
 
 console.log('\n【幽墟头目】');
-const boss=await ev(()=>{ const nm=Object.keys(BOSS_AV).find(k=>AV_SLOTS.indexOf(BOSS_AV[k])>=0);
+const boss=await ev(()=>{ const nm=Object.keys(BOSS_FACE).find(k=>FAME_SLOTS.indexOf(BOSS_FACE[k])>=0);
   S.npcs=S.npcs.filter(n=>n.name!==nm);
   S.npcs.push(normNpc({name:nm,gender:'男',age:500,identity:'幽墟头目',faction:'幽墟头目',realm:'幽墟',alignment:'邪道'}));
-  const n=findNpc(nm); const a=avSlotOf(n); setFace(n,'h2m_01'); return {nm, a, b:BOSS_AV[nm], now:avSlotOf(n)}; });
-ok(`头目「${boss.nm}」原来走 BOSS_AV，手选以后不再被顶回去`, boss.a===boss.b&&boss.now==='h2m_01');
-ok('头目「随天意」以后又回到 BOSS_AV 那张', await ev(nm=>{ const n=findNpc(nm); setFace(n,null); return avSlotOf(n); },boss.nm)===boss.b);
+  const n=findNpc(nm); const a=avSlotOf(n); setFace(n,'h2m_01'); return {nm, a, b:BOSS_FACE[nm], now:avSlotOf(n)}; });
+ok(`头目「${boss.nm}」原来走 BOSS_FACE，手选以后不再被顶回去`, boss.a===boss.b&&boss.now==='h2m_01');
+ok('头目「随天意」以后又回到 BOSS_FACE 那张', await ev(nm=>{ const n=findNpc(nm); setFace(n,null); return avSlotOf(n); },boss.nm)===boss.b);
 
 console.log('\n【随天意】');
 const auto=await ev(()=>{ setFace(S.player,null); return {pick:!!S.player.avatarPick, av:S.player.avatar, por:S.player.portrait}; });

@@ -65,8 +65,8 @@ await page.click('#crStart');
 await page.waitForSelector('#choices .opt',{timeout:25000});
 
 console.log('\n【头像落桶】');
-ok('图集是 10×9、90 张（v3.0 加了八个幽墟头目）', await page.evaluate(()=>AV_COLS===10&&AV_ROWS===9&&AV_SLOTS.length===90&&Object.values(BOSS_AV).every(k=>AV_SLOTS.includes(k))));
-ok('主角有画像且是东荒的桶', await page.evaluate(()=>/^d[1-4][mf]_0[12]$/.test(S.player.avatar)));
+ok('两张图集：捏人+特型 124、名人+头目 137（v4.0 美术规范；细项见 s23）', await page.evaluate(()=>AV_COLS===10&&AV_SLOTS.length===124&&FAME_SLOTS.length===137&&Object.values(BOSS_FACE).every(k=>FAME_SLOTS.includes(k))));
+ok('主角有画像且是东荒的桶', await page.evaluate(()=>/^d[1-4][mf]_0[1-4]$/.test(S.player.avatar)));
 ok('面板上的脸用的是图集，不是墨影', await page.evaluate(()=>{
   const bg=document.querySelector('#pFace .avatar').style.backgroundImage||'';
   return bg.indexOf('data:image/webp')>=0;
@@ -89,7 +89,7 @@ ok('八岁孩子 → x_child', await sp({name:'戊',gender:'女',age:8,identity:
 ok('精灵 → x_elf', await sp({name:'己',gender:'女',age:120,identity:'精灵游侠',realm:'西陆'})==='x_elf');
 ok('佣兵也算冒险者那一型', await sp({name:'庚',gender:'男',age:26,identity:'佣兵',realm:'西陆'})==='x_adventurer');
 ok('寻常西陆青年落 w2m 桶', /^w2m_0[12]$/.test(await sp({name:'辛',gender:'男',age:26,identity:'铁匠',realm:'西陆'})));
-ok('樱洲少女落 s1f 桶', /^s1f_0[12]$/.test(await sp({name:'壬',gender:'女',age:16,identity:'商家女儿',realm:'樱洲'})));
+ok('樱洲少女落 s1f 桶', /^s1f_0[1-4]$/.test(await sp({name:'壬',gender:'女',age:16,identity:'商家女儿',realm:'樱洲'})));
 ok('同一个人每次同一张脸', await page.evaluate(()=>{
   const n={name:'某甲',gender:'男',age:30,identity:'散修',realm:'东荒'};
   return avPickSlot(n)===avPickSlot(Object.assign({},n));
@@ -121,8 +121,8 @@ ok('已出的四张头目立绘都在', await page.evaluate(()=>
 ok('B2 批那四张头目立绘也进来了', await page.evaluate(()=>
   ['x_boss_east','x_fox','x_witch','x_onryo'].every(k=>POR_IMG[k])));
 ok('十七种特型各有一张立绘', await page.evaluate(()=>
-  AV_SLOTS.filter(x=>x.charAt(0)==='x'&&!Object.values(BOSS_AV).includes(x)).every(k=>k==='x_child'||POR_IMG[k])));
-ok('头目认脸：路西法用堕天使那张，妲己用九尾那张', await page.evaluate(()=>avSlotOf({name:'路西法',avatar:'x_abyss'})==='x_fallen_angel'&&!!porOf({name:'路西法'})&&avSlotOf({name:'妲己'})==='x_fox'&&!!porOf({name:'妲己'})));
+  AV_SLOTS.filter(x=>x.charAt(0)==='x').every(k=>k==='x_child'||POR_IMG[k])));
+ok('头目认脸（v4）：路西法、妲己各有自己那张，不再借特型立绘', await page.evaluate(()=>avSlotOf({name:'路西法',avatar:'x_abyss'})==='b_lucifer'&&!porOf({name:'路西法'})&&avSlotOf({name:'妲己'})==='b_daji'&&!porOf({name:'妲己'})));
 await page.evaluate(()=>{ S.scene.location='云台观山门'; renderScene(); });
 await page.waitForTimeout(300);
 ok('正文区真的铺上了淡背景', await page.evaluate(()=>{
