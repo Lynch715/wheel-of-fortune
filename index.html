@@ -8321,7 +8321,7 @@ async function startNewGame(opts){
   if(opts.ganzhi==null) opts.ganzhi=Math.floor(Math.random()*60);
   if(opts.startMonth==null) opts.startMonth=Math.floor(Math.random()*12);
   $('story').innerHTML=''; $('choices').innerHTML='';
-  S=null; localStorage.removeItem(LS_SAVE);
+  S=null; saveWipe();
   setBusy(true,'投胎已定，正在铸造你的身世……');
   beginChapter('楔子','',null,null);
   try{
@@ -8649,7 +8649,7 @@ async function gameOverFlow(cause){
   div.querySelector('.endingblock').insertAdjacentHTML('beforeend',`${bio.epitaph?`<div class="epitaph">「${esc(bio.epitaph)}」</div>`:''}<div class="scoreline">${esc(bio.verdict||'')}　·　评分 ${score}　·　历 ${S.turn} 回　·　成就 ${S.achievements.length}</div>`);
   const hall=JSON.parse(localStorage.getItem(LS_HALL)||'[]');
   hall.push({name:S.player.name,title:titleOf(S.player),age:S.player.age,turns:S.turn,score,verdict:bio.verdict||'',epitaph:bio.epitaph||'',cause,ts:Date.now()});
-  localStorage.setItem(LS_HALL,JSON.stringify(hall.slice(-50)));
+  try{ localStorage.setItem(LS_HALL,JSON.stringify(hall.slice(-50))); }catch(_){}
   S.bio=bio; S.pending=null; logChapter(div); saveGame(); renderPanel(); renderOptions([]);
   setBusy(false);
 }
@@ -8702,6 +8702,33 @@ async function bookAll(run){
     rq.onerror=()=>rej(rq.error);
   });
 }
+// 存档停在第 chapSeq 章，全本里却还有更后面的：那几章写出来了、数值没存上。
+// 挪到另一个 run 名下（不然下一章会按同样的编号盖上去），在正文底下说一声，给个导出。
+var bookShown=null;   // 读档时铺全本那一步；对账的提示要等它铺完再贴，不然会被盖掉
+async function bookLost(){
+  if(!S||!S.runId) return;
+  try{ await bookShown; }catch(_){}
+  let rows=[];
+  try{ rows=await bookAll(S.runId); }catch(_){ return; }
+  const lost=rows.filter(r=>r.seq>num(S.chapSeq));
+  if(!lost.length) return;
+  const run=S.runId+'~lost'+Date.now().toString(36);
+  try{
+    const db=await idb();
+    await new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,'readwrite'); const st=tx.objectStore(IDB_STORE);
+      for(const r of lost){ st.delete(r.id); st.put(Object.assign({},r,{id:run+':'+String(r.seq).padStart(5,'0'),run})); }
+      tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
+    });
+  }catch(_){}
+  const n=lost.length;
+  const div=document.createElement('div');
+  div.className='chapter'; div.style.animation='none';
+  div.innerHTML=`<div class="chapmark">存档没接上</div><div class="ntext" style="margin-top:14px"><p>存档停在第 ${S.turn} 回。之后还写了 ${n} 章，那时浏览器没存进去，这几章里的银钱、修为、行囊、人物变化都没算上，现在的进度是第 ${S.turn} 回的。</p><p>那 ${n} 章的正文还留着，可以导出来看，也可以照着上面写的事用自由输入补回来。</p><p><button class="opt" style="width:auto;display:inline-block">导出这 ${n} 章正文</button></p></div>`;
+  div.querySelector('button').onclick=()=>download(`${S.player.name}_没存上的${n}章.md`, lost.map(r=>r.text).join('\n\n---\n\n'));
+  $('story').appendChild(div);
+  $('story').scrollTop=$('story').scrollHeight;
+}
 async function bookClear(run){
   const db=await idb();
   const rows=await bookAll(run);
@@ -8737,14 +8764,88 @@ function chapterText(div){
 /* ================= 存档 ================= */
 const LS_SLOT='wanjie_slot_';
 function slotMeta(i){
-  try{ const raw=localStorage.getItem(LS_SLOT+i); if(!raw) return null; const d=JSON.parse(raw); return d&&d.player?d:null; }catch(_){ return null; }
+  return parseSave(SLOTS[i]);
 }
+/* 存档库：主档和三个存档位都放 IndexedDB。
+   localStorage 一个域名只有 5MB 上下，lynch715.github.io 底下几个游戏合用这一份，
+   满了以后 setItem 直接抛错，存档就停在那一回，页面一刷新数值全回去了。 */
+const SAVE_DB='wanjie_saves';
+let sdbP=null;
+function sdb(){
+  if(sdbP) return sdbP;
+  sdbP=new Promise((res,rej)=>{
+    if(typeof indexedDB==='undefined') return rej(new Error('no idb'));
+    const rq=indexedDB.open(SAVE_DB,1);
+    rq.onupgradeneeded=()=>{ const db=rq.result; if(!db.objectStoreNames.contains('kv')) db.createObjectStore('kv'); };
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>rej(rq.error);
+  }).catch(e=>{ sdbP=null; throw e; });
+  return sdbP;
+}
+async function kvGet(k){
+  const db=await sdb();
+  return new Promise((res,rej)=>{ const rq=db.transaction('kv','readonly').objectStore('kv').get(k); rq.onsuccess=()=>res(rq.result==null?null:rq.result); rq.onerror=()=>rej(rq.error); });
+}
+async function kvPut(k,v){
+  const db=await sdb();
+  return new Promise((res,rej)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put(v,k); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error||new Error('abort')); });
+}
+async function kvDel(k){
+  const db=await sdb();
+  return new Promise((res,rej)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').delete(k); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
+}
+function lsDel(k){ try{ localStorage.removeItem(k); }catch(_){} }
+// 写盘排队：一回里 saveGame 会叫好几次，只写最新那份，前一笔没落地不开第二笔
+let saveQ=null, saveBusy=false;
 function saveGame(){
   if(!S) return;
-  try{ localStorage.setItem(LS_SAVE,JSON.stringify(S)); }
-  catch(e){ // 超出浏览器容量：先砍旧章节再存
-    try{ S.chapters=(S.chapters||[]).slice(-40); localStorage.setItem(LS_SAVE,JSON.stringify(S)); }
-    catch(e2){ try{ S.chapters=[]; localStorage.setItem(LS_SAVE,JSON.stringify(S)); }catch(e3){ toast('存档失败：浏览器存储已满，请点「存档」导出备份'); } }
+  S.savedAt=Date.now();
+  let str;
+  try{ str=JSON.stringify(S); }catch(e){ saveFail(); return; }
+  saveQ=str;
+  if(!saveBusy) saveDrain();
+}
+async function saveDrain(){
+  saveBusy=true;
+  while(saveQ!=null){
+    const s=saveQ; saveQ=null;
+    try{ await kvPut('main',s); lsDel(LS_SAVE); saveOk(); }
+    catch(e){
+      // IndexedDB 打不开（个别浏览器的无痕模式）才退回 localStorage
+      try{ localStorage.setItem(LS_SAVE,s); saveOk(); }catch(e2){ saveFail(); }
+    }
+  }
+  saveBusy=false;
+}
+function saveOk(){ const b=document.getElementById('saveWarn'); if(b) b.remove(); }
+function saveFail(){
+  if(document.getElementById('saveWarn')) return;
+  const b=document.createElement('div'); b.id='saveWarn';
+  b.style.cssText='position:fixed;left:0;right:0;top:0;z-index:9999;background:#8b2c20;color:#fff;font-size:14px;line-height:1.5;padding:8px 14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35)';
+  b.innerHTML='这一回没存上，刷新页面会丢进度。先点「存档」导出一份文件。<button style="margin-left:10px;padding:2px 10px;font-size:13px">导出</button>';
+  b.querySelector('button').onclick=()=>{ try{ download(`存档_${S.player.name}_第${S.turn}回.json`, JSON.stringify(typeof withFaces==='function'?withFaces(S):S,null,1), 'application/json'); }catch(_){} };
+  document.body.appendChild(b);
+}
+function saveWipe(){ saveQ=null; lsDel(LS_SAVE); kvDel('main').catch(()=>{}); }
+// 两份都读：IndexedDB 里的和 localStorage 里的，谁新用谁（老档没有 savedAt，算最旧）
+function parseSave(raw){ if(!raw) return null; try{ const d=JSON.parse(raw); return d&&d.player?d:null; }catch(_){ return null; } }
+async function readMain(){
+  let a=null,b=null;
+  try{ a=parseSave(await kvGet('main')); }catch(_){}
+  try{ b=parseSave(localStorage.getItem(LS_SAVE)); }catch(_){}
+  if(a&&b) return num(b.savedAt)>num(a.savedAt)?b:a;
+  return a||b;
+}
+// 存档位：开局读进缓存，存档阁是同步画的
+var SLOTS={};
+async function slotsLoad(){
+  for(let i=1;i<=3;i++){
+    let v=null;
+    try{ v=await kvGet('slot'+i); }catch(_){}
+    let ls=null; try{ ls=localStorage.getItem(LS_SLOT+i); }catch(_){}
+    if(ls&&!v){ try{ await kvPut('slot'+i,ls); v=ls; lsDel(LS_SLOT+i); }catch(_){ v=ls; } }
+    else if(ls&&v) lsDel(LS_SLOT+i);
+    SLOTS[i]=v;
   }
 }
 function saveCfgFromFields(){
@@ -8758,18 +8859,23 @@ function flushAll(){ try{ saveCfgFromFields(); snapshotDuel(); snapshotConvo(); 
 window.addEventListener('pagehide',flushAll);
 window.addEventListener('beforeunload',flushAll);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushAll(); });
-function loadGame(){
-  const raw=localStorage.getItem(LS_SAVE);
-  if(!raw) return false;
-  try{ S=migrate(JSON.parse(raw)); }catch(_){ return false; }
+async function loadGame(){
+  const d=await readMain();
+  if(!d) return false;
+  try{ S=migrate(d); }catch(_){ return false; }
+  return showGame();
+}
+function showGame(){
   if(!S||!S.player) return false;
+  bookShown=null;
   $('story').innerHTML='';
   if(S.chapters&&S.chapters.length){
     $('story').innerHTML=S.chapters.join('');
     $('story').querySelectorAll('.chapter').forEach(c=>c.style.animation='none');
     // 再把 IndexedDB 里的全本铺回来
-    if(S.runId) bookAll(S.runId).then(rows=>{
-      if(!rows||rows.length<=S.chapters.length) return;
+    if(S.runId) bookShown=bookAll(S.runId).then(rows=>{
+      rows=(rows||[]).filter(r=>r.seq<=num(S.chapSeq));
+      if(!rows.length||rows.length<=S.chapters.length) return;
       $('story').innerHTML=rows.map(r=>r.html).join('');
       $('story').querySelectorAll('.chapter').forEach(c=>c.style.animation='none');
       $('story').scrollTop=$('story').scrollHeight;
@@ -8785,6 +8891,7 @@ function loadGame(){
   renderPanel();
   renderOptions(S.lastOptions||[]);
   setTimeout(()=>{ $('story').scrollTop=$('story').scrollHeight; },50);
+  bookLost();
   // 上次关页面时正在等模型回复：给一个「续上」按钮，不让那一步白做
   if(S.pending&&!S.over){
     const pd=S.pending;
@@ -9008,18 +9115,19 @@ function renderSlots(){
     if(!S){ toast('尚无进度可存'); return; }
     const i=b.dataset.sv;
     if(slotMeta(i)&&!confirm('存档位 '+i+' 已有内容，覆盖？')) return;
-    try{ localStorage.setItem(LS_SLOT+i,JSON.stringify(S)); toast('已存入存档位 '+i); }
-    catch(_){ toast('存不下了，先导出成文件或清一个位'); }
-    renderSlots();
+    S.savedAt=Date.now();
+    const str=JSON.stringify(S);
+    kvPut('slot'+i,str).then(()=>{ SLOTS[i]=str; lsDel(LS_SLOT+i); toast('已存入存档位 '+i); renderSlots(); })
+      .catch(()=>toast('存不下了，先导出成文件'));
   });
   box.querySelectorAll('button[data-ld]').forEach(b=>b.onclick=()=>{
     const d=slotMeta(b.dataset.ld); if(!d) return;
     if(!confirm('读取后当前进度会被覆盖（可先存入别的位）。确定？')) return;
-    S=migrate(d); saveGame(); $('saveMask').classList.remove('on'); loadGame(); toast('读档成功，续写此生');
+    S=migrate(d); saveGame(); $('saveMask').classList.remove('on'); showGame(); toast('读档成功，续写此生');
   });
   box.querySelectorAll('button[data-dl]').forEach(b=>b.onclick=()=>{
     if(!confirm('清空存档位 '+b.dataset.dl+'？')) return;
-    localStorage.removeItem(LS_SLOT+b.dataset.dl); renderSlots();
+    const i=b.dataset.dl; lsDel(LS_SLOT+i); kvDel('slot'+i).catch(()=>{}); SLOTS[i]=null; renderSlots();
   });
 }
 async function exportBook(){
@@ -9056,7 +9164,7 @@ $('importFile').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onload=()=>{
-    try{ const d=JSON.parse(r.result); if(!d.player) throw 0; const fx=d._faces; delete d._faces; faceImport(fx); S=migrate(d); saveGame(); loadGame(); toast('读档成功，续写此生'); }
+    try{ const d=JSON.parse(r.result); if(!d.player) throw 0; const fx=d._faces; delete d._faces; faceImport(fx); S=migrate(d); saveGame(); showGame(); toast('读档成功，续写此生'); }
     catch(_){ toast('存档文件无法识别'); }
   };
   r.readAsText(f);
@@ -9364,11 +9472,12 @@ async function doPwaInstall(){
 }
 
 /* ================= 启动 ================= */
-(function boot(){
+(async function boot(){
   facesLoad().then(k=>{ if(k&&S&&S.player){ try{ renderPanel(); }catch(_){} } }).catch(()=>{});
   if(window.__Pdone) window.__Pdone();
   applyRealmTheme();
-  if(loadGame()){ applyRealmTheme(); toast('已载入上次进度'); return; }
+  await slotsLoad();
+  if(await loadGame()){ applyRealmTheme(); saveGame(); toast('已载入上次进度'); return; }
   if(!cfg.key){ showDemo(); openSettings(); return; }   // 没 key 直接把设置摆到脸上，且关不掉
   openCreate();
 })();

@@ -116,7 +116,8 @@ const cu=await ev(()=>{ const n=findNpc('冷面客'); const f=FACES[n.face]; ret
 ok('NPC 用上了自己的图', /^u_/.test(cu.face||'')&&!!cu.img&&cu.style.includes(cu.img));
 ok('写的那句相貌进了 portrait，也记在图上', cu.por==='三十来岁，瘦，穿灰袍，左眉一道疤'&&cu.desc===cu.por);
 ok('用自己的图就不出立绘', cu.por2===null);
-ok('存档那一格里不带图', await ev(img=>!localStorage.getItem(LS_SAVE).includes(img.slice(30,90)),cu.img));
+await ev(()=>{ saveGame(); }); await page.waitForTimeout(300);
+ok('存档那一格里不带图', await ev(async img=>!(await kvGet('main')).includes(img.slice(30,90)),cu.img));
 ok('图进了 IndexedDB', await ev(async id=>{ for(const k in FACES) delete FACES[k]; const n=await facesLoad(); return n>=1&&!!FACES[id]; },cu.face));
 
 console.log('\n【导出 / 导入】');
@@ -130,7 +131,7 @@ await p2.addInitScript(()=>{ localStorage.setItem('wanjie_cfg',JSON.stringify({b
 await p2.goto('http://localhost:8981/'); await p2.waitForTimeout(400);
 const f2=path.join(os.tmpdir(),'face_save.json'); fs.writeFileSync(f2,ex);
 await p2.setInputFiles('#importFile',f2); await p2.waitForTimeout(600);
-const im=await p2.evaluate(([id,img])=>({has:!!FACES[id], face:(findNpc('冷面客')||{}).face, st:avatarFace(findNpc('冷面客')).includes(img), save:localStorage.getItem(LS_SAVE).includes('_faces')||localStorage.getItem(LS_SAVE).includes(img.slice(30,90))}),[cu.face,cu.img]);
+const im=await p2.evaluate(async([id,img])=>{ const sv=await kvGet('main')||''; return {has:!!FACES[id], face:(findNpc('冷面客')||{}).face, st:avatarFace(findNpc('冷面客')).includes(img), save:sv.includes('_faces')||sv.includes(img.slice(30,90))}; },[cu.face,cu.img]);
 ok('新设备导入：图回来了、NPC 头像还是那张', im.has&&im.face===cu.face&&im.st);
 ok('导入后存档那一格里仍不带图', !im.save);
 ok('新设备刷新一遍，图还在（进了它自己的 IndexedDB）', await (async()=>{ await p2.reload(); await p2.waitForTimeout(800); return p2.evaluate(([id,img])=>!!FACES[id]&&avatarFace(findNpc('冷面客')).includes(img),[cu.face,cu.img]); })());
