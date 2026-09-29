@@ -2138,10 +2138,21 @@ function recalcLords(quiet){
     if(!pool.length) continue;
     const top=pool[0], was=S.lords[R]||null;
     S.lords[R]={name:top.name, score:top.score, isPlayer:top.isPlayer, rumor:false, second:pool[1]?pool[1].score:0};
-    if(quiet||!was||was.name===top.name) continue;
-    if(top.isPlayer){ S.lordSince=num(S.months); S.lordPolicy=null; S.lordMonths=0; ledger(`你坐上了${R}界主之位`); news(`${R}换了界主——是你`); }
-    else if(was.isPlayer){ S.lordSince=null; S.lordPolicy=null; ledger(`丢了${R}界主之位，${top.name}接了过去`); news(`${top.name}取代你成了${R}的界主`); }
-    else if(!was.rumor){ ledger(`${R}换了界主：${was.name}下、${top.name}上`); news(`${R}换了界主，如今是${top.name}`); }
+    /* 主角上位、下台不看 quiet：门派战、夺门这些地方是静默重算的，登位却是当场发生的，
+       以前在这里一律跳过，结果坐上去了既没提示、任期也没起算。quiet 只管 NPC 之间换人那一句风闻。 */
+    if(top.isPlayer&&!(was&&was.isPlayer)){
+      S.lordSince=num(S.months); S.lordPolicy=null; S.lordMonths=0;
+      ledger(`你坐上了${R}界主之位`); news(`${R}换了界主——是你`);
+      continue;
+    }
+    if(top.isPlayer&&S.lordSince==null) S.lordSince=num(S.months);   // 老档：静默登位时没记下任期
+    if(was&&was.isPlayer&&!top.isPlayer){
+      S.lordSince=null; S.lordPolicy=null;
+      ledger(`丢了${R}界主之位，${top.name}接了过去`); news(`${top.name}取代你成了${R}的界主`);
+      continue;
+    }
+    if(quiet||!was||was.name===top.name||was.rumor) continue;
+    ledger(`${R}换了界主：${was.name}下、${top.name}上`); news(`${R}换了界主，如今是${top.name}`);
   }
 }
 

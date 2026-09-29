@@ -301,6 +301,30 @@ ok('界主来使时，三个选项直接摆在本门卡上', await ev(()=>{
   renderWorld();
   return $('clanBody').querySelectorAll('button[data-press]').length>=3; }));
 
+console.log('\n【八·打赢一仗当场登位】');
+await reset();
+const up=await ev(()=>{
+  S.player['声望']=100; S.player.attributes['修为']=300; clan().power=50; S.lordSince=null;
+  recalcLords(true);
+  const before=isLordOf('东荒');
+  S.ledger=[];
+  const r=Math.random; Math.random=()=>0.999; const res=clanWar('风雷堂'); Math.random=r;
+  return {before, win:!!(res&&res.win), now:isLordOf('东荒'), since:S.lordSince, months:num(S.months),
+          led:S.ledger.some(x=>/你坐上了东荒界主之位/.test(x))};
+});
+ok('开打前还不是界主', up.before===false);
+ok('打赢以后当场坐上界主', up.win&&up.now);
+ok('登位记进旧账', up.led);
+ok('任期从这个月起算', up.since===up.months);
+ok('静默重算也会记下丢位', await ev(()=>{
+  S.ledger=[]; S.player['声望']=0; S.player.attributes['修为']=1; clan().power=0;
+  recalcLords(true);
+  return !isLordOf('东荒')&&S.lordSince==null&&S.ledger.some(x=>/丢了东荒界主之位/.test(x)); }));
+ok('老档：已经是界主却没记任期，重算时补上', await ev(()=>{
+  S.player['声望']=100; S.player.attributes['修为']=300; clan().power=100; recalcLords(true);
+  S.lordSince=null; S.ledger=[]; recalcLords(true);
+  return isLordOf('东荒')&&S.lordSince===num(S.months)&&S.ledger.length===0; }));
+
 console.log('\n通过 '+oks.length+' 项，失败 '+fails.length+' 项');
 if(errs.length) console.log('页面报错：\n'+errs.slice(0,6).join('\n'));
 ok('全程无页面报错', errs.length===0);
