@@ -4939,13 +4939,31 @@ function treasureDuel(opp){
   return n;
 }
 // 每月结一次：进账、代价、圣杯回血
+/* v4.3：以前这几笔都是悄悄结的，钱进了账、恶名涨了，界面上一个字没有，玩家以为珍宝不进钱。
+   现在每一笔都进起居注和本回合的数值变化，数值本身没动。 */
 function treasureMonth(){
   const p=S.player; if(!p) return;
-  const inc=tSum(t=>t.income); if(inc){ p.money=num(p.money)+inc; }
-  const hp=tSum(t=>t.cost&&t.cost.hp), evil=tSum(t=>t.cost&&t.cost.evil);
-  if(hp) p.hp=Math.max(1,num(p.hp)-hp);
-  if(evil) p['恶名']=clamp(num(p['恶名'])+evil);
-  if(hasT('shengbei')) p.hp=100;
+  const h=heldTreasures();
+  for(const {t} of h) if(t.income){
+    p.money=num(p.money)+t.income;
+    lastDeltas['家财']=num(lastDeltas['家财'])+t.income;
+    logGot(`【${t.name}】这个月进账 ${t.income} 两`);
+  }
+  for(const {t} of h){
+    const c=t.cost||{};
+    if(c.hp){
+      const before=num(p.hp); p.hp=Math.max(1,before-c.hp); const d=before-num(p.hp);
+      if(d){ lastDeltas['气血']=num(lastDeltas['气血'])-d; logGot(`【${t.name}】吸去气血 ${d}`); }
+    }
+    if(c.evil){
+      const before=num(p['恶名']); p['恶名']=clamp(before+c.evil); const d=num(p['恶名'])-before;
+      if(d){ lastDeltas['恶名']=num(lastDeltas['恶名'])+d; logGot(`带着【${t.name}】，恶名 +${d}`); }
+    }
+  }
+  if(hasT('shengbei')){
+    const d=100-num(p.hp);
+    if(d>0){ p.hp=100; lastDeltas['气血']=num(lastDeltas['气血'])+d; logGot(`【圣杯】让气血回满（+${d}）`); }
+  }
 }
 function treasureFate(v){
   const floor=Math.max(0,...heldTreasures().map(x=>num(x.t.fateFloor)));

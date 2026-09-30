@@ -78,6 +78,26 @@ ok('老档里名字对得上的补成珍宝', await page.evaluate(()=>{ const s=
 await page.evaluate(()=>document.querySelector('#choices .opt').click()); await idle();
 ok('走一回合不报错，提示词里带着珍宝', lastPrompt.includes('【主角随身的珍宝')&&lastPrompt.includes('如意金箍棒：修为 +28'));
 
+console.log('\n【月底记账（v4.3）】');
+const mon=await page.evaluate(()=>{
+  const p=S.player;
+  for(const k of ['jinqi','xianzhe','cunzheng','shengbei']){
+    if(hasT(k)) continue;
+    delete tState()[k];
+    const t=treasureByKey(k); const it=claimTreasure({name:t.name},t); if(it){ p.items[t.cat]=p.items[t.cat]||[]; p.items[t.cat].push(it); }
+  }
+  p.money=1000; p.hp=60; p['恶名']=0; S.day=29;
+  const per=upkeepPerMonth();
+  applyTurn({narrative:'x',summary:'x',playerChanges:{}},'试',{fate:10,days:1});
+  return {money:p.money, per, lines:changeLines({}), led:(S.ledger||[]).slice(-12), md:lastDeltas['家财'], hp:p.hp, evil:p['恶名']};
+});
+ok('两件进钱的都进了账', mon.money>=1000-mon.per+200);
+ok('家财变化含进账', mon.md>=200);
+ok('变化里写明是哪件进的账', mon.lines.some(x=>/商盟金契】这个月进账 120 两/.test(x))&&mon.lines.some(x=>/贤者之石】这个月进账 80 两/.test(x)));
+ok('旧账（进提示词的）不记每月进账，免得撑胖', !mon.led.some(x=>/进账/.test(x)));
+ok('村正涨恶名有记录', mon.evil>=2&&mon.lines.some(x=>/村正】，恶名 \+2/.test(x)));
+ok('圣杯回满气血有记录', mon.hp===100&&mon.lines.some(x=>/圣杯】让气血回满/.test(x)));
+
 console.log('\n通过 '+oks.length+' 项，失败 '+fails.length+' 项');
 if(errs.length) console.log('页面报错：\n'+errs.slice(0,6).join('\n'));
 ok('全程无页面报错', errs.length===0);
