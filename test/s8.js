@@ -34,6 +34,7 @@ const r=await page.evaluate(()=>{
     skills:{'画符':'略通'},artsAdd:[{name:'太清剑诀',desc:'x',style:'刚猛',level:20},{name:S.player.arts[0]?S.player.arts[0].name:'无名',desc:'x',style:'刚猛',level:20}],
     itemsAdd:{'丹药':[{name:'聚气丹'}],'武器':[{name:'青锋剑',bonus:8}],'符箓':['镇妖符'],'魔导器':[{name:'星辉法杖'}]},itemsRemove:['不存在的东西']},
     npcUpdates:[{name:n0.name,'好感度':'+10'},{name:'查无此人','好感度':5}]};
+  fdSet('boon','free');   // v4.5 每回合新得物件有上限（传奇 3 件），这一项只测归栏，放到 5 件那一档
   applyTurn(d,'试',{fate:10,months:1});
   renderPanel(); renderBag();
   const lines=changeLines(d);
@@ -63,18 +64,19 @@ ok('未了之事换说法不重置挂起时间', await page.evaluate(()=>{
   S.months+=3; addUnresolved('沈师姐到底怎么死的，要查清');
   return sc.unresolved.length===1&&sc.unresolved[0]==='沈师姐到底怎么死的，要查清'&&sc.uMon[sc.unresolved[0]]===m0;
 }));
-ok('挂满六个月没下文就搁下，进「已翻篇」', await page.evaluate(()=>{
-  S.months+=3; ageUnresolved();
-  return sceneU().unresolved.length===0&&turnedLive().length===1&&S.ledger.some(x=>/搁下一桩久无下文的事/.test(x));
+ok('挂了很久没碰的事不再每回合提，但账上留着，玩家点到时再提（v4.4 口径）', await page.evaluate(()=>{
+  S.months+=3; S.turn+=12; ageUnresolved();
+  const t=sceneU().unresolved[0];
+  return sceneU().unresolved.length===1&&!unresolvedPrompt('随便走走').includes(t)&&unresolvedPrompt('接着查：'+t).includes(t);
 }));
-ok('翻篇的事模型再塞回来也不收', await page.evaluate(()=>{ addUnresolved('沈师姐的死因还没查清'); return sceneU().unresolved.length===0; }));
+ok('了结的事模型再塞回来也不收', await page.evaluate(()=>{ const t=sceneU().unresolved[0]; dropUnresolved(t,'已了结'); addUnresolved('沈师姐的死因还没查清'); return sceneU().unresolved.length===0; }));
 ok('提示词里有「已经翻篇的事」', await page.evaluate(()=>stateBlocks().includes('【已经翻篇的事')&&stateBlocks().includes('沈师姐到底怎么死的')));
-ok('一年后翻篇的记录自己淡掉', await page.evaluate(()=>{ S.months+=12; const a=turnedLive().length===0&&!stateBlocks().includes('【已经翻篇的事'); addUnresolved('沈师姐的死因还没查清'); const b=sceneU().unresolved.length===1; sceneU().unresolved=[]; return a&&b; }));
-ok('旧账带着几个月前，标题写明是核对用的', await page.evaluate(()=>{
-  ledger('测试用的一笔旧账'); S.months+=5; const t=stateBlocks();
-  return t.includes('测试用的一笔旧账（5个月前）')&&t.includes('不是本回合的素材');
+ok('翻篇的记录一直留着，一年后模型再塞回来也不收（v4.4 起结案是永久事实）', await page.evaluate(()=>{ S.months+=12; const a=turnedLive().length>=1; addUnresolved('沈师姐的死因还没查清'); const b=sceneU().unresolved.length===0; sceneU().unresolved=[]; return a&&b; }));
+ok('旧账带日期（不再挂「几个月前」，免得每月整块变、缓存失效），标题写明是核对用的', await page.evaluate(()=>{
+  ledger('测试用的一笔旧账'); const d=S.date; S.months+=5; const t=stateBlocks();
+  return t.includes('·'+d+'　测试用的一笔旧账')&&!t.includes('测试用的一笔旧账（')&&t.includes('不是本回合的素材');
 }));
-ok('本月记的写「本月」', await page.evaluate(()=>{ ledger('刚记的一笔'); return ledgerText(5).includes('刚记的一笔（本月）'); }));
+ok('刚记的一笔落在「近来的」那一卷，带着当天日期', await page.evaluate(()=>{ ledger('刚记的一笔'); const L=ledgerParts(); return L.open.concat(L.sealed).some(x=>x.includes('·'+S.date+'　刚记的一笔')); }));
 ok('同一句风闻半年里只推一次', await page.evaluate(()=>{
   S.engineNews=[]; news('一句重复的风闻'); S.engineNews=[]; news('一句重复的风闻'); const a=S.engineNews.length===0;
   S.months+=6; news('一句重复的风闻'); return a&&S.engineNews.length===1;

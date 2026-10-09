@@ -87,7 +87,7 @@ ok('过界记进了旧账', await page.evaluate(()=>S.ledger.some(x=>x.includes(
 jb=noBan(await page.evaluate(()=>jieBlock()));
 ok('轮枢名录里有公会与神殿', jb.includes('冒险者公会')&&jb.includes('命运神殿'));
 ok('轮枢没有自己的体系，境界仍按西陆的路子算', await page.evaluate(()=>/一阶|二阶|三阶|四阶|五阶|六阶/.test(tierOf(S.player.attributes['修为']))));
-ok('西陆的旧识落进「别处的旧识」', await page.evaluate(()=>{const p=stateBlocks();const i=p.indexOf('【别处的旧识');const j=p.indexOf('【已亡故');return p.slice(i,j).includes('远在西陆');}));
+ok('西陆的旧识留在人物名册里，标着西陆人氏（v4.5 名册取代「别处的旧识」）', await page.evaluate(()=>{const p=stateBlocks();const i=p.indexOf('【人物名册');const j=p.indexOf('【当前时间】');return p.slice(i,j).includes('西陆人氏');}));
 ok('轮枢铸了自己的格局', await page.evaluate(()=>(S.forged||[]).includes('轮枢')&&S.world.factions.some(f=>f.realm==='轮枢')));
 ok('势力格局只列当界的', await page.evaluate(()=>localFactions().every(f=>f.realm==='轮枢')));
 ok('万界榜上别界的人带界名', await page.evaluate(()=>S.world.ranking.some(r=>r.realm==='西陆')));
@@ -154,7 +154,7 @@ ok('地名表里的地名直接对上横幅', await page.evaluate(()=>{
   S.realm=r; S.scene.location=l;
   return k==='sc_w_tavern' && k2==='sc_s_school';
 }));
-ok('提示词没胖失控（开局那回 <16800 字；v3.3 起万界榜开局就是满榜十人）', await page.evaluate(()=>turnPrompt('试试',{fate:10,months:1}).length<16800));
+ok('提示词没胖失控（开局那回 <19500 字；v4.5 名册常驻、规则挪到前头，多出的部分走缓存）', await page.evaluate(()=>turnPrompt('试试',{fate:10,months:1}).length<19500));
 
 console.log('\n【v1.1 口径】');
 ok('轮枢随时可去，不看轮转', await page.evaluate(()=>{
@@ -201,14 +201,15 @@ ok('老存档升到 v9：功法物件补上来路', await page.evaluate(()=>{
   return s.v>=9 && s.player.arts[0].from==='西陆'
       && s.player.items['其他'][0].from==='西陆' && s.foreignFrom===12;
 }));
-ok('风闻固定两条', await page.evaluate(()=>turnPrompt('试',{fate:10,months:1}).includes('rumors**固定写两条**')));
+ok('风闻至多两条、没有就给空（v4.5 统一口径）', await page.evaluate(()=>{const t=turnPrompt('试',{fate:10,months:1});return t.includes('rumors至多两条')&&!t.includes('固定写两条')&&!t.includes('须有风闻两条');}));
 ok('随心所欲档写明不得推翻已成定局', await page.evaluate(()=>FREE_LAW.includes('已成定局的事')&&FREE_LAW.includes('不能当那件事没发生过')));   // v3.6 起这两条挪进了【言出法随】
 ok('三档都写了「尝试 vs 结果」', await page.evaluate(()=>
   FREEDOM.free.tone.includes('尝试')&&FREEDOM.mid.tone.includes('不决定成败')&&FREEDOM.strict.tone.includes('不是结果')));
-ok('判定尺子三处同一套', await page.evaluate(()=>{
-  const a=judgeHowTo(10);
-  return a.includes('40 容易')&&a.includes('气运加成')&&a.includes('掷 20 必成')
-      && judgeBlock({fate:10,months:1}).includes('40 容易');
+ok('判定只由引擎做：自由行动没给判定就不许自判，对抗冒险才掷骰（v4.5）', await page.evaluate(()=>{
+  const S0=S.freedom; fdSetAll('mid');
+  const r=judgeBlock({fate:10,months:1}).includes('不许自己掷骰')&&worldRules().includes('成败只由引擎判')&&!worldRules().includes('你必须自行设定难度')
+    &&riskOf('说服掌柜放行').attr==='谈吐'&&riskOf('在观里练功')===null&&riskOf('去镇上问路')===null&&riskOf('读书')===null;
+  fdSetAll(S0); return r;
 }));
 ok('幽墟仍不可投胎：那个按钮是锁着的', await page.evaluate(()=>{
   const sp=document.querySelector('#jieGrid .jiebtn[data-k="幽墟"]');

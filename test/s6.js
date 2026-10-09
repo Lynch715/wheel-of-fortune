@@ -46,7 +46,8 @@ ok('异界之身打六折', await page.evaluate(()=>{
   return Math.abs(b-Math.round(a*0.6*10)/10)<0.15;
 }));
 ok('贡献没到顶就不算掌了势力', await page.evaluate(()=>{
-  S.sect={name:(S.world.factions.find(f=>f.realm==='东荒')||{}).name,contrib:100,joined:0};
+  // v4.4 起开局把模型铸的小势力也并进来（云台观权势 30），测「掌了势力」要拿当界最大的那家
+  S.sect={name:S.world.factions.filter(f=>f.realm==='东荒').sort((a,b)=>b.power-a.power)[0].name,contrib:100,joined:0};
   const low=playerFactionPower();
   S.sect.contrib=999;
   const high=playerFactionPower();
@@ -124,7 +125,7 @@ ok('魔潮那两个月物价涨', await page.evaluate(()=>{
 }));
 ok('魔潮当头，世界事件让位给它', await page.evaluate(()=>{
   const e=tideEvent();
-  return !!e&&e.includes('不许当它没发生')&&makeJudge(null,'走走').worldEvent===e;
+  return !!e&&e.includes('不强改玩家目标')&&makeJudge(null,'走走').worldEvent===e;   // v4.4 起魔潮是背景，相关时才展开
 }));
 ok('关系差的两界，门一开就打起来', await page.evaluate(()=>{
   S.ties['东荒-西陆']=20; S.engineNews=[];
@@ -134,7 +135,7 @@ ok('关系差的两界，门一开就打起来', await page.evaluate(()=>{
 ok('打起仗来，异界之身判定门槛 +5', await page.evaluate(()=>{
   const r=S.realm, h=S.homeRealm;
   S.realm='西陆'; S.homeRealm='东荒'; S.ties['东荒-西陆']=20; S.gateOpen=true;
-  const dc=warDC(), inJudge=judgeBlock({fate:10,months:1}).includes('战时外人的 +5');
+  const dc=warDC(), inJudge=judgeBlock({fate:10,months:1,check:rollCheck('修为',55,'硬闯')}).includes('战时外人的 +5');
   S.realm=r; S.homeRealm=h;
   return dc===5&&inJudge;
 }));

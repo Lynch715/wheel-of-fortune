@@ -81,7 +81,7 @@ ok('结算里没有一句「不肯／没舍得／还不到」', !got.out.some(x=
 const over=await ev(()=>{ const n=findNpc('冷面客'); n.gave=0; const out=applyConvoEffects(n,{money:999999},true); return out.join('|'); });
 ok('要的钱超出家底：给到上限，措辞是「掏不出来」一类而不是不肯', /给了你 \d+ 两/.test(over)&&!/不肯|没舍得/.test(over));
 const src=await ev(()=>document.documentElement.innerHTML);
-ok('对话结算：随心所欲档模型误填 success:false 也照样落账', src.includes('fdm().freeAct?true:(d.attempt?d.attempt.success!==false:true)')&&src.includes('if(fdm().freeAct&&d.attempt) d.attempt.success=true'));
+ok('对话结算：随心所欲档不吃模型填的成败，照样落账（v4.4 起成败只认引擎）', src.includes('fdm().freeAct?true:(d.attempt?d.attempt.success!==false:true)')&&src.includes('d.attempt=engineCheck'));
 
 const fol=await ev(()=>{ const n=findNpc('冷面客'); n.relation='朋友'; n.identity='散修'; n.follow=false; n.askFollowTurn=null;
   S.npcs.forEach(x=>{ if(x!==n) x.follow=false; });
@@ -99,10 +99,10 @@ ok('选项上的判定标「必成」，不标百分比', tag.includes('必成')
 console.log('\n【另外两档不受影响】');
 for(const lv of ['mid','strict']){
   const r=await ev(v=>{ fdSetAll(v); const n=findNpc('冷面客'); n.follow=false; n.relation='徒弟'; convo={npc:'冷面客',msgs:[],favorTotal:0};
-    const cp=convoPrompt(n,'教我你那套剑法',7,null); convo=null;
+    const cp=convoPrompt(n,'教我你那套剑法',7,null,conversationJudge(n,'教我你那套剑法',7)); convo=null;
     return {wr:worldRules(), cp, caps:convoCaps(n), fol:followBlock(n)}; }, lv);
   ok(`${lv}：没有【言出法随】`, !r.wr.includes('【言出法随】')&&!r.cp.includes('【言出法随】'));
-  ok(`${lv}：面谈照旧掷骰、有 need 表`, r.cp.includes('【引擎掷骰】')&&r.cp.includes('这一档的 need 参考'));
+  ok(`${lv}：面谈照旧掷骰，由引擎定难度与成败（v4.4 起）`, r.cp.includes('【本次交谈引擎判定】{')&&r.cp.includes('"need"'));
   ok(`${lv}：好感 0 的人不教功法`, r.caps.artGate>0&&!r.caps.canItem);
   ok(`${lv}：请人同行照旧看好感`, /好感/.test(r.fol));
 }

@@ -22,7 +22,8 @@ await page.click('#jieGrid .jiebtn[data-k="东荒"]'); await page.click('#crStar
 await page.waitForSelector('#choices .opt',{timeout:25000});
 
 // 造一个人放进名录；不走 autoFollow
-const put=n=>page.evaluate(o=>{ const x=normNpc(o); x.realm=jieName(); x.follow=false; S.npcs=S.npcs.filter(y=>y.name!==x.name); S.npcs.push(x); return x.name; },n);
+const put=n=>page.evaluate(o=>{ const x=normNpc(Object.assign({fameInitialized:true},o));   // v4.4 起名人头一回建档会把修为抬到名望值，这里要的就是测试写的修为
+  x.realm=jieName(); x.follow=false; S.npcs=S.npcs.filter(y=>y.name!==x.name); S.npcs.push(x); return x.name; },n);
 const why=nm=>page.evaluate(n=>followBlock(findNpc(n)),nm);
 await page.evaluate(()=>{ S.player.attributes['修为']=50; S.player.attributes['谈吐']=60; S.npcs.forEach(n=>n.follow=false); });
 

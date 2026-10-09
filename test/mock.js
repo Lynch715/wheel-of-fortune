@@ -143,7 +143,7 @@ function pickBody(prompt){
       npcEvents:[d.npcs[0][0]+'出了趟门'],
       rumors:[{text:'万界榜要重排了'},{text:'轮枢传来：界门将开'}],
       newVendettas:turnNo===2?[{name:foe,reason:'你砸了他的场子',lethal:true}]:[],
-      questUpdates:[{title:'查明父亲死因',progress:10,status:'进行中'}],newQuests:[],
+      questUpdates:[{title:'查明父亲死因',progress:10,status:'进行中',stage:'找到一条旧线索',evidence:'翻出父亲留下的半封信'}],newQuests:[],
       rankingUpdates:[],factionUpdates:[],duel:null,
       options:[{text:'继续修炼',hint:'',type:'rest',months:2},
                {text:'出门寻访线索',hint:'',type:'check',months:1,check:{attr:'谈吐',need:55}},

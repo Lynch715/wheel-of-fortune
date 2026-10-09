@@ -251,13 +251,13 @@ ok('还在【当前场景】之前，跟局势块挨着', tp.indexOf('【本门�
 ok('几个数都写进去了', /权势42/.test(tp)&&/弟子37人/.test(tp)&&/人心66/.test(tp)&&/公中1280两/.test(tp));
 ok('钉了那句：别给普通弟子起名字', /不要给普通弟子起名字/.test(tp));
 ok('没有门派的时候，这一块整个不出现', await ev(()=>{ S.clan=null; return turnPrompt('试',{fate:10,days:1}).indexOf('【本门】')<0; }));
-ok('提示词没胖失控（<18500）', tp.length<18500);
+ok('提示词没胖失控（<21000；v4.5 名册常驻）', tp.length<21000);
 
 console.log('\n【十四·存档】');
-ok('存档到 v25', await ev(()=>SAVE_VERSION===25));
+ok('存档到最新版（v27）', await ev(()=>SAVE_VERSION===27));
 ok('老档没有门派，迁上来是 null', await ev(()=>{
   const d=JSON.parse(JSON.stringify(S)); d.v=23; delete d.clan; d.sect=null;
-  const m=migrate(d); return m.v===25&&m.clan===null; }));
+  const m=migrate(d); return m.v===SAVE_VERSION&&m.clan===null; }));
 ok('老档里贡献早就到顶的，直接补上门派身份，不倒扣那两成', await ev(()=>{
   const d=JSON.parse(JSON.stringify(S)); d.v=23; delete d.clan;
   d.sect={name:'云台观',contrib:999,joined:1};

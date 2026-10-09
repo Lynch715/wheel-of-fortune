@@ -122,7 +122,7 @@ ok('打听的挑谈吐', await page.evaluate(()=>guessAttr('去酒馆打听消�
 ok('查书的挑学识', await page.evaluate(()=>guessAttr('翻阅典籍查一查旧案')==='学识'));
 ok('参悟的挑悟性', await page.evaluate(()=>guessAttr('闭目参悟那句口诀')==='悟性'));
 ok('挑不出来就不挑', await page.evaluate(()=>guessAttr('随便走走')===null));
-ok('挑好的属性写进了判定块', await page.evaluate(()=>judgeBlock({fate:10,months:1,freeAttr:'谈吐'}).includes('引擎已经挑好：【谈吐】')));
+ok('对抗冒险由引擎掷骰，结果写进判定块（v4.5）', await page.evaluate(()=>{ const c=rollCheck('谈吐',55,'说服他'); return judgeBlock({fate:10,months:1,check:c}).includes('属性判定：谈吐'); }));
 await page.fill('#freeInput','去酒馆打听消息'); await page.click('#sendBtn'); await idle(); await page.waitForTimeout(200);
 ok('自由输入走一遍不报错', errs.length===0||console.log('    '+errs.slice(0,2).join(' | ')));
 
@@ -149,12 +149,9 @@ ok('头像也按外观年龄落桶', await page.evaluate(()=>{
   const b=avBucket('男',lookAge({age:210,lifespan:600}),'东荒');
   return a.join()!==b.join()&&lookAge({age:210,lifespan:600})===39;   // v3.3 两段式：寿元600的人两百一十岁看着三十九
 }));
-ok('明说了要留下就不硬推转场', await page.evaluate(()=>{
-  S.nudgeSeq=0; S.turn=0;
+ok('明说了要留下就不硬推转场（v4.4 起推进提示一律不强制转场）', await page.evaluate(()=>{
   const stay=pickNudge('我就留在这儿，接着练');
-  S.nudgeSeq=0; S.turn=0;
-  const go=pickNudge('随便走走');
-  return !stay.includes('换个地方') && go.includes('换个地方');
+  return !stay.includes('换个地方') && stay.includes('不得强制转场');
 }));
 ok('选项规则不再禁止重复练功，只要求内容有变化', await page.evaluate(()=>
   OPTIONS_RULE.includes('同一件事可以接连做')&&!OPTIONS_RULE.includes('就别再给「继续练功」')));

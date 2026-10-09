@@ -14,7 +14,7 @@ console.log('\n【体积】');
 const raw=fs.readFileSync(path.join(__dirname,'..','index.html'));
 const gz=zlib.gzipSync(raw,{level:6});
 console.log('  index.html 原始 '+(raw.length/1048576).toFixed(2)+' MB，gzip 后 '+(gz.length/1048576).toFixed(2)+' MB');
-ok('首屏传输在 1.8 MB 以内（v3.3 是 2.32 MB）', gz.length<1.8*1048576);
+ok('首屏传输在 1.85 MB 以内（v3.3 是 2.32 MB；v4.4/v4.5 加了世界档案与人物名册的引擎代码）', gz.length<1.85*1048576);
 ok('图标与 manifest 是真文件，不再内嵌', fs.existsSync(path.join(__dirname,'..','site.webmanifest'))
   &&fs.existsSync(path.join(__dirname,'..','icon','icon-192.png'))
   &&fs.existsSync(path.join(__dirname,'..','icon','icon-512.png'))

@@ -26,3 +26,4 @@ playtest/
 node_modules/
 test/*.png
 _临时预览_可删/
+_to_delete/

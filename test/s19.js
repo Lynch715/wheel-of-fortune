@@ -269,12 +269,12 @@ ok('界主来使等着回话，模型知道', await ev(()=>{
   return /某界主派来的人还等在山门外/.test(t); }));
 
 console.log('\n【九·存档】');
-ok('存档到 v25', await ev(()=>SAVE_VERSION===25));
+ok('存档到最新版（v27）', await ev(()=>SAVE_VERSION===27));
 ok('v24 的老门派补上战事那几栏', await ev(()=>{
   const d=JSON.parse(JSON.stringify(S)); d.v=24;
   delete d.clan.wars; delete d.clan.ally; delete d.clan.press; delete d.clan.lordWarDue;
   const m=migrate(d);
-  return m.v===25&&!!m.clan.wars&&m.clan.ally===''&&m.clan.press===null&&m.clan.lordWarDue===null; }));
+  return m.v===SAVE_VERSION&&!!m.clan.wars&&m.clan.ally===''&&m.clan.press===null&&m.clan.lordWarDue===null; }));
 
 console.log('\n【十·界面】');
 await reset();

@@ -69,7 +69,7 @@ const jb=await page.evaluate(()=>jieBlock());
 ok('【当界名录】只写当界（不带别界的名录）', !jb.includes('魔法塔') && !jb.includes('幕府') && !jb.includes('忍村'));
 ok('名录含东荒境界表', init.includes('炼气 → 筑基 → 金丹'));
 ok('名录含东荒称呼表', init.includes('道友'));
-ok('风闻改成本界+轮枢两条', init.includes('轮枢传来的异界风闻'));
+ok('风闻至多两条、异界的要点明哪一界（v4.5 口径）', init.includes('异界的风闻要点明是哪一界的事')&&init.includes('至多两条'));
 ok('万界榜跨界条款在', init.includes('要经轮枢过去找'));
 
 console.log('\n【引擎】');

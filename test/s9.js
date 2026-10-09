@@ -56,7 +56,7 @@ ok('颜色跟着换了', await page.evaluate(()=>getComputedStyle(document.docum
 ok('随行的人一道到了轮枢，留下的还在东荒', await page.evaluate(h=>followers().every(n=>n.realm==='轮枢')&&findNpc(h).realm==='东荒'&&findNpc('丙徒').realm==='东荒',home));
 ok('提示词里写着玩家原话和引擎办完过界', lastPrompt.includes('动身去轮枢')&&lastPrompt.includes('引擎已办完过界'));
 ok('提示词列了随行的人', lastPrompt.includes('【随行的人')&&lastPrompt.includes('柳青娥'));
-ok('东荒的旧识没进「眼下要紧的人」', await page.evaluate(h=>{ const t=stateBlocks(); const a=t.indexOf('【眼下要紧的人】'), b=t.indexOf('【别处的旧识'); return t.slice(a,b).indexOf(h)<0&&t.slice(b).indexOf(h)>=0; },home));
+ok('东荒的旧识没进「眼下要紧的人」', await page.evaluate(h=>{ const t=stateBlocks(); const a=t.indexOf('【眼下要紧的人'), b=t.indexOf('【当世格局】'); const r=t.slice(t.indexOf('【人物名册'),t.indexOf('【当前时间】')); return t.slice(a,b).indexOf('"name":"'+h+'"')<0&&r.includes(h+'｜')&&r.includes('东荒人氏'); },home));
 ok('这一回的抬头写着轮枢，签条是轮枢的颜色', await page.evaluate(()=>{
   const c=Array.from(document.querySelectorAll('#story .chapter')).pop();
   return c.querySelector('.chaptime').textContent.includes('◎ 轮枢')&&c.querySelector('.chapmark').style.background!=='';

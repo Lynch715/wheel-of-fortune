@@ -34,7 +34,7 @@ console.log('\n【进提示词和面板】');
 await page.evaluate(()=>{ S.npcs.push(normNpc({name:'孙悟空',gender:'男',age:500,identity:'齐天大圣',relation:'萍水相逢'})); S.npcs.push(normNpc({name:'猪八戒',gender:'男',age:500,identity:'天蓬',relation:'萍水相逢'})); });
 const sb=await page.evaluate(()=>stateBlocks());
 ok('提示词里有名人旧交，两个都认识的人排在前面', sb.includes('【名人旧交')&&sb.includes('孙悟空—猪八戒：师兄弟'));
-ok('认识的人资料里带着旧交', await page.evaluate(()=>{ const t=stateBlocks(); const a=t.indexOf('【眼下要紧的人】'); return t.slice(a).includes('"旧交":"猪八戒—唐僧'); }));
+ok('认识的人资料里带着旧交', await page.evaluate(()=>{ const t=stateBlocks(); const a=t.indexOf('【眼下要紧的人'); return t.slice(a).includes('"旧交":"旧交：猪八戒—唐僧'); }));   // v4.4 起历史旧交带「旧交：」前缀，与新关系区分
 ok('规则写明不许写成素不相识', sb.includes('不许写成素不相识')||(await page.evaluate(()=>lawBlock()+worldRules())).includes('不许写成素不相识'));
 ok('旧交一块不超过 40 行', await page.evaluate(()=>tiesBlock().split('\n').length<=40));
 ok('没认识名人时不塞一大段（只列在场首领之间的）', await page.evaluate(()=>{
@@ -44,7 +44,7 @@ ok('没认识名人时不塞一大段（只列在场首领之间的）', await p
   const t=tiesBlock(); S.npcs=keep; S.world.ranking=rk;
   return !t.includes('孙悟空—猪八戒'); }));
 ok('人物详情里显示旧交', await page.evaluate(()=>{ showNpc(findNpc('猪八戒')); const t=$('npcMBody').textContent; $('npcMask').classList.remove('on'); return t.includes('旧交')&&t.includes('猪八戒—唐僧'); }));
-ok('提示词没胖太多（<18500）', await page.evaluate(()=>turnPrompt('试',{fate:10,days:1}).length<18500));
+ok('提示词没胖太多（<20500；v4.5 名册常驻）', await page.evaluate(()=>turnPrompt('试',{fate:10,days:1}).length<20500));
 
 console.log('\n通过 '+oks.length+' 项，失败 '+fails.length+' 项');
 if(errs.length) console.log('页面报错：\n'+errs.slice(0,6).join('\n'));

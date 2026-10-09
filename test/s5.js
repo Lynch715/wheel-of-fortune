@@ -118,7 +118,7 @@ ok('往下几层门槛跟着涨（+10/+10/+10/+12/+15）', await page.evaluate((
   const out=[]; for(let n=2;n<=6;n++){ S.abyssLayer=n; out.push(abyssDC()); } S.abyssLayer=1;
   return out.join()==='10,10,10,12,15';
 }));
-ok('判定尺子里写明了在第几层、加多少', await page.evaluate(()=>judgeBlock({fate:10,months:1}).includes('另加幽墟第1层的 +5')));
+ok('判定块里写明了在第几层、加多少（v4.5 由引擎掷骰，门槛构成写进判定）', await page.evaluate(()=>judgeBlock({fate:10,months:1,check:rollCheck('修为',55,'硬闯')}).includes('另加幽墟第1层的 +5')));
 ok('随心所欲档在幽墟一样会受重伤', await page.evaluate(()=>{
   const f=S.fd_peril; fdSet('peril','free');
   const zero=fdm().injury===0;                 // 这一档本来免伤
@@ -272,14 +272,14 @@ console.log('\n【跨界宿命】');
 ok('人不在幽墟时结不了案', await page.evaluate(()=>{
   const r=S.realm; S.realm='轮枢';
   const q=S.quests.find(x=>x.kind==='abyss'); q.status='进行中'; q.progress=50;
-  applyTurn({narrative:'x',summary:'x',questUpdates:[{title:q.title,status:'完成'}]},'试',{fate:10,months:0});
+  applyTurn({narrative:'x',summary:'x',questUpdates:[{title:q.title,status:'完成',stage:'了断',evidence:'在幽墟里把那道坎断了'}]},'试',{fate:10,months:0});
   const blocked=q.status==='进行中'&&q.progress<=95;
   S.realm=r;
   return blocked;
 }));
 ok('在幽墟才了结得了，了结之后异界适应归零', await page.evaluate(()=>{
   const q=S.quests.find(x=>x.kind==='abyss');
-  applyTurn({narrative:'x',summary:'x',questUpdates:[{title:q.title,status:'完成'}]},'试',{fate:10,months:0});
+  applyTurn({narrative:'x',summary:'x',questUpdates:[{title:q.title,status:'完成',stage:'了断',evidence:'在幽墟里把那道坎断了'}]},'试',{fate:10,months:0});
   const f=foreignPenalty();
   return q.status==='完成'&&S.abyssFreed===true&&f.grow===1&&f.cost===1;
 }));
