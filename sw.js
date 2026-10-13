@@ -2,7 +2,7 @@
    整份 index.html 有两三兆，每次都从 GitHub Pages 拉一遍太慢。
    这里一律「先给缓存里的，再悄悄去拿新的」：第二次进来是本地的，秒开；
    后台拿到新版就通知页面，由玩家自己点刷新——不在他玩到一半的时候换掉脚下的地板。 */
-const VER='mingyunzhilun-v4.5';
+const VER='mingyunzhilun-startup-20261013';
 const SMALL=['./site.webmanifest','./favicon.ico','./icon/icon-192.png','./icon/icon-512.png','./icon/maskable-512.png','./icon/icon-180.png'];
 
 self.addEventListener('install',e=>{

@@ -6546,7 +6546,34 @@ function playerWordsOf(name,action){
   return plain(parts.join('')).slice(0,120);
 }
 
+// 模型JSON是外部数据：先复制并校验，再让引擎填写属性。
+function initRecord(v){ return !!v&&typeof v==='object'&&!Array.isArray(v); }
+function initList(v){ return Array.isArray(v)?v:(v==null||v===''?[]:[v]); }
+function initNamed(v,key){
+  return initList(v).map(x=>typeof x==='string'?{[key]:x.trim()}:initRecord(x)?{...x,[key]:plain(x[key])}:null).filter(x=>x&&x[key]);
+}
+function normalizeInitData(raw){
+  if(!initRecord(raw)||!initRecord(raw.player)) throw new Error('模型未返回有效的人物资料，请重新开局或更换模型');
+  const d=JSON.parse(JSON.stringify(raw)),p=d.player;
+  p.name=plain(p.name);if(!p.name)throw new Error('模型返回的人物缺少姓名，请重新开局');
+  for(const k of ['gender','background','backstory','faction','appearance','path','biaozi']) p[k]=plain(p[k]);
+  p.attributes=initRecord(p.attributes)?p.attributes:{};
+  p.status=asArr(p.status);p.personality=asArr(p.personality);
+  p.arts=initNamed(p.arts,'name');
+  const bag=initRecord(p.items)?p.items:{其他:p.items};p.items={};
+  for(const k of ['法宝','典籍','医药','毒药','杂书','其他']) p.items[k]=initNamed(bag[k],'name').map(o=>({...o,desc:plain(o.desc),from:plain(o.from)}));
+  d.npcs=initNamed(d.npcs,'name').map(n=>({...n,personality:asArr(n.personality),memory:asArr(n.memory)}));
+  d.quests=initNamed(d.quests,'title');
+  if(initRecord(d.scene)){
+    d.scene.location=plain(d.scene.location);
+    for(const k of ['uAge','uMon','uTouched']) if(!initRecord(d.scene[k]))d.scene[k]={};
+  }else d.scene=null;
+  d.opening=plain(d.opening);d.rumors=asArr(d.rumors);
+  d.options=initList(d.options).map(o=>typeof o==='string'?{text:o,type:'normal',days:3}:initRecord(o)?{...o,text:plain(o.text)}:null).filter(o=>o&&o.text);
+  return d;
+}
 function applyInit(d, opts){
+  d=normalizeInitData(d);
   const keepWorld=S&&S.world;
   S = newStateShell();
   S.difficulty=(opts&&opts.difficulty)||'normal';
@@ -6623,9 +6650,9 @@ function dedupeRank(list){
 function applyWorld(w){ if(!w) return; mergeWorld(w,w.__realm||jieName()); registerSect(); fameSync(); rankRefresh(); recalcLords(true); }
 function worldShape(w){
   return {
-    factions:FACTIONS[w.__realm||jieName()]?factionSeed(w.__realm||jieName()):(w.factions||[]).filter(f=>f&&f.name).map(f=>({name:f.name,type:plain(f.type)||'',realm:w.__realm||jieName(),alignment:f.alignment||'中立',power:clamp(num(f.power)),leader:f.leader||'',desc:f.desc||''})),
-    ranking:(w.ranking||[]).filter(r=>r&&r.name).map(r=>({name:r.name,faction:r.faction||'散人',realm:r.realm||w.__realm||jieName(),'修为':clampW(num(r['修为'])),note:r.note||'',alive:true})).sort((a,b)=>b['修为']-a['修为']).slice(0,10),
-    events:(w.events||[]).slice(0,4),
+    factions:FACTIONS[w.__realm||jieName()]?factionSeed(w.__realm||jieName()):initNamed(w.factions,'name').filter(f=>f&&f.name).map(f=>({name:f.name,type:plain(f.type)||'',realm:w.__realm||jieName(),alignment:f.alignment||'中立',power:clamp(num(f.power)),leader:f.leader||'',desc:f.desc||''})),
+    ranking:initNamed(w.ranking,'name').filter(r=>r&&r.name).map(r=>({name:r.name,faction:r.faction||'散人',realm:r.realm||w.__realm||jieName(),'修为':clampW(num(r['修为'])),note:r.note||'',alive:true})).sort((a,b)=>b['修为']-a['修为']).slice(0,10),
+    events:initList(w.events).filter(e=>typeof e==='string'||initRecord(e)).slice(0,4),
     fallen:[], vacant:0
   };
 }
@@ -8914,17 +8941,18 @@ async function startNewGame(opts){
   beginChapter('楔子','',null,null);
   try{
     const worldP=llmJSON(worldPrompt(opts),null,{maxTokens:6000}).catch(e=>{ console.warn('world gen failed',e); return null; });
-    const d=await llmJSON(initSchemaPrompt(opts),raw=>{ const t=extractPartialField(raw,'opening')||extractPartialField(raw,'backstory'); if(t) updateChapterNarrative(t); });
-    applyInit(d,opts);
+    let d=await llmJSON(initSchemaPrompt(opts),raw=>{ const t=extractPartialField(raw,'opening')||extractPartialField(raw,'backstory'); if(t) updateChapterNarrative(t); });
+    d=applyInit(d,opts);
     updateChapterNarrative(d.opening);
     finishChapter({date:S.date,rumors:d.rumors,npcEvents:null},null,null);
     renderPanel(); const _o=dedupeOptions(d.options); renderOptions(_o); S.lastOptions=_o; saveGame();
     setBusy(true,'正在铸造当世格局与高手榜……');
     const w=await worldP;
-    if(w){ applyWorld(w); renderWorld(); renderPanel(); saveGame(); }
+    if(w){try{applyWorld(w);renderWorld();renderPanel();saveGame();}catch(e){console.warn('world init failed',e);toast('人物已生成；当世格局暂未加载，可稍后重试');}}
     toast('身世已定，前路漫漫，好自为之');
     setDot('world',true);
   }catch(e){
+    console.error('game init failed',e);
     updateChapterNarrative('（开局失败：'+e.message+'）');
     liveChapter=null;
     const retry=document.createElement('button');
